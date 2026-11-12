@@ -1,0 +1,247 @@
+package com.zenvex.online.game
+
+import android.content.Context
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import androidx.compose.runtime.mutableStateOf
+import com.zenvex.online.net.Supa
+import org.json.JSONObject
+import javax.crypto.Mac
+import javax.crypto.spec.SecretKeySpec
+
+/**
+ * Çevrimiçi oyun oturumu. Oyun yalnız geçerli bir sunucu oturumuyla oynanır:
+ *  - Giriş: zx_session_start (bakım, yasak, cihaz yasağı ve güvenlik kontrolü; eski cihazdaki oturum düşer).
+ *    Oyun kaydı her zaman sunucudan gelir; cihazdaki dosya yalnız lobide gösterim içindir.
+ *  - Nabız (15 sn): bağlantı 30 sn yoksa oyun durur ("Bağlantı Koptu"), 90 sn yoksa lobiye dönülür.
+ *  - Kayıt: zx_save3, sıra numarası + HMAC-SHA256 imza (oturum sırrı). Sunucu altın/elmas/seviye sıçramasını reddeder
+ *    ve son geçerli kaydı geri yollar; oyun o kayda döner.
+ */
+object Session {
+    enum class State { Off, Starting, Live, Lost }
+
+    val state = mutableStateOf(State.Off)
+    /** Lobiye atılma nedeni (başka cihaz, bakım, yasak, bağlantı) — lobi gösterir */
+    val kicked = mutableStateOf<String?>(null)
+    @Volatile var sid = ""
+        private set
+    @Volatile private var secret = ""
+    @Volatile private var seq = 0L
+    /** Oyunda geçen simülasyon süresi (sn): hız hilesi kontrolü için sunucuya gider */
+    @Volatile var simTime = 0.0
+    @Volatile private var lastOk = 0L
+    @Volatile private var fails = 0
+    private val main = Handler(Looper.getMainLooper())
+    private var beatThread: Thread? = null
+
+    /** Uygulama arka planda mı: arka plandayken nabız gecikse de oturum atılmaz (Android ağı uyutur) */
+    @Volatile var background = false
+        private set
+    @Volatile private var bgSince = 0L
+    /**
+     * V21: arka planda bu süre kalınırsa bağlantı kopar (sayaç; anında değil). Süre dolmadan dönülürse oyun kaldığı yerden sürer.
+     * Kopan oturuma yeniden girince oyuncu başlangıç ormanında (kamp) doğar; kaldığı yere ışınlanmak istismar olurdu.
+     */
+    const val BG_LIMIT_MS = 30_000L
+    private const val PREFS = "zx_session"
+    private var appCtx: Context? = null
+    private val bgKick = Runnable {
+        if (background && sid.isNotEmpty() && state.value != State.Off) {
+            markLost(true)
+            kick("Uygulama 30 saniyeden uzun arka planda kaldı, bağlantı koptu")
+        }
+    }
+
+    private fun markLost(v: Boolean) {
+        appCtx?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.putBoolean("lost", v)?.apply()
+    }
+
+    /** Bağlantı kopmuştu mu (bir kez okunur): oyuna girince kampa ışınlanmak için */
+    fun takeLost(ctx: Context): Boolean {
+        val p = ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val lost = p.getBoolean("lost", false)
+        if (lost) p.edit().putBoolean("lost", false).apply()
+        return lost
+    }
+
+    /** Uygulama arka plana geçti (MainActivity.onStop): kayıt zaten onPause'da gider; 30 sn sayacı başlar */
+    fun onBackground() {
+        background = true
+        bgSince = SystemClock.elapsedRealtime()
+        if (sid.isNotEmpty()) { main.removeCallbacks(bgKick); main.postDelayed(bgKick, BG_LIMIT_MS) }
+    }
+
+    /**
+     * Uygulama öne geldi: oturum açıksa hemen nabız atılır (sunucu oturumu tazeler, dünya sessizce devam eder).
+     * Çok uzun kalındıysa lobiye dönülür; konum kayıtta olduğu için yeniden girince kaldığın yerden başlarsın.
+     */
+    fun onForeground() {
+        main.removeCallbacks(bgKick)
+        if (!background) return
+        background = false
+        val my = sid
+        if (my.isEmpty() || state.value == State.Off) return
+        if (SystemClock.elapsedRealtime() - bgSince > BG_LIMIT_MS) { markLost(true); kick("Uzun süre uzaktaydın, bağlantı koptu. Tekrar gir; başlangıç ormanında doğarsın."); return }
+        Supa.bg {
+            val r = runCatching { Supa.rpcSync("zx_heartbeat", Account.authJson().put("p_sid", my).put("p_game_time", simTime)) }
+            main.post { onBeat(my, r) }
+        }
+    }
+
+    /** Oyun dursun mu (bağlantı yok ya da oturum kapalı) */
+    val blocked: Boolean get() = state.value != State.Live
+
+    /** Oturumu açar; başarıda sunucudaki kayıt (boş olabilir) [done]'a gelir, hatada mesaj. */
+    fun start(ctx: Context, server: String, done: (data: String?, err: String?) -> Unit) {
+        appCtx = ctx.applicationContext
+        if (!Account.loggedIn) { done(null, "Önce hesabına gir"); return }
+        if (!Legal.noticeSeen.value || Legal.termsNeeded.value) { done(null, "Önce bilgilendirme metnini ve Kullanım Şartları'nı onayla"); return }
+        state.value = State.Starting
+        kicked.value = null
+        Supa.bg {
+            val r = runCatching {
+                val dev = Guard.report(ctx)
+                JSONObject(Supa.rpcSync("zx_session_start", Account.authJson().put("p_server", server).put("p_device", dev)))
+            }
+            main.post {
+                r.onSuccess { o ->
+                    sid = o.optString("sid"); secret = o.optString("secret"); seq = 0; simTime = 0.0
+                    lastOk = SystemClock.elapsedRealtime(); fails = 0
+                    state.value = State.Live
+                    startBeat()
+                    done(o.optString("data"), null)
+                }.onFailure { e ->
+                    state.value = State.Off
+                    val m = e.message.orEmpty()
+                    Account.checkBan(m)
+                    if (m.startsWith("BAKIM|")) com.zenvex.online.ui.Gate.poll()
+                    done(null, friendly(m))
+                }
+            }
+        }
+    }
+
+    private fun friendly(m: String) = when {
+        m.startsWith("BAKIM|") -> "Sunucu bakımda"
+        m.startsWith("OTURUM|") -> m.substringAfter("OTURUM|")
+        m.startsWith("HILE|") -> m.substringAfter("HILE|")
+        m.contains("BAN|") -> "Hesabın yasaklı"
+        m.contains("ulaşılamadı") -> "İnternet bağlantısı yok"
+        else -> m.ifEmpty { "Bağlanılamadı" }
+    }
+
+    private fun startBeat() {
+        val my = sid
+        beatThread?.interrupt()
+        beatThread = Thread {
+            while (sid == my && !Thread.currentThread().isInterrupted) {
+                try { Thread.sleep(15_000) } catch (_: InterruptedException) { break }
+                if (sid != my) break
+                val r = runCatching {
+                    Supa.rpcSync("zx_heartbeat", Account.authJson().put("p_sid", my).put("p_game_time", simTime))
+                }
+                main.post { onBeat(my, r) }
+            }
+        }.also { it.isDaemon = true; it.start() }
+    }
+
+    private fun onBeat(my: String, r: Result<String>) {
+        if (sid != my) return
+        r.onSuccess { body ->
+            lastOk = SystemClock.elapsedRealtime(); fails = 0
+            if (state.value == State.Lost) com.zenvex.online.ui.Toaster.show("Bağlantı Geri Geldi")
+            state.value = State.Live
+            runCatching { JSONObject(body) }.getOrNull()?.let { o ->
+                if (!o.isNull("trade")) Trade.claimPending(o.optLong("trade"))
+                // posta rozeti oyundayken de güncellensin
+                if (o.has("unread")) Account.unread.intValue = o.optInt("unread")
+            }
+        }.onFailure { e ->
+            val m = e.message.orEmpty()
+            when {
+                m.startsWith("OTURUM|") || m.contains("BAN|") || m.startsWith("BAKIM|") || m.contains("Bu hesap silindi") -> {
+                    if (m.startsWith("BAKIM|")) com.zenvex.online.ui.Gate.poll()
+                    kick(friendly(m))
+                }
+                else -> {
+                    fails++
+                    if (fails >= 2) state.value = State.Lost
+                    if (!background && SystemClock.elapsedRealtime() - lastOk > 90_000) { markLost(true); kick("Bağlantı koptu, tekrar gir") }
+                }
+            }
+        }
+    }
+
+    fun kick(reason: String) {
+        if (state.value == State.Off) return
+        end(send = false)
+        kicked.value = reason
+    }
+
+    /**
+     * Yalnız [my] oturumu hâlâ açıksa kapatır. Oyun ekranı kapanırken gecikmeli çağrılır: o arada yeni bir oturum açıldıysa
+     * (lobiden hemen tekrar girildiyse) yeni oturuma dokunmaz. Eskiden yeni oturumu kapatıyor, dünya sessizce donuyordu.
+     */
+    fun endIf(my: String) {
+        if (my.isNotEmpty() && sid == my) end()
+    }
+
+    /** Oyundan çıkış: oturum kapanır (son kayıt önce gönderilmeli). */
+    fun end(send: Boolean = true) {
+        val my = sid
+        sid = ""; secret = ""
+        beatThread?.interrupt(); beatThread = null
+        state.value = State.Off
+        if (send && my.isNotEmpty()) Supa.bg { runCatching { Supa.rpcSync("zx_session_end", Account.authJson().put("p_sid", my)) } }
+    }
+
+    /**
+     * Oyun sunucusu (rust/zenvex_server) kimlik mesajı: oturum numarası ve oturum sırrıyla imzalanmış zaman damgası.
+     * Sır cihazdan çıkmaz; sunucu aynı sırrı Supabase'den (zx_net_auth) alıp imzayı karşılaştırır.
+     */
+    fun netHello(server: String, meta: JSONObject?): JSONObject? {
+        val my = sid; val sec = secret
+        if (my.isEmpty() || sec.isEmpty()) return null
+        val acc = Account.id.value
+        val ts = Pass.now()
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(sec.toByteArray(), "HmacSHA256"))
+        val sig = mac.doFinal("net:$acc:$my:$ts".toByteArray()).joinToString("") { "%02x".format(it) }
+        return JSONObject().put("t", "hello").put("acc", acc).put("sid", my).put("ts", ts).put("sig", sig).put("server", server)
+            .put("meta", meta ?: JSONObject())
+    }
+
+    private fun sign(seq: Long, data: String): String {
+        val mac = Mac.getInstance("HmacSHA256")
+        mac.init(SecretKeySpec(secret.toByteArray(), "HmacSHA256"))
+        return mac.doFinal("$seq:$data".toByteArray()).joinToString("") { "%02x".format(it) }
+    }
+
+    /** İmzalı kayıt argümanları (takas da kullanır). */
+    @Synchronized
+    fun signedSave(level: Int, data: String, kills: Int, xp: Long): JSONObject {
+        seq++
+        return Account.authJson().put("p_sid", sid).put("p_seq", seq).put("p_sig", sign(seq, data))
+            .put("p_level", level).put("p_data", data).put("p_kills", kills).put("p_xp", xp)
+    }
+
+    /**
+     * Kaydı sunucuya yollar (arka planda). Sunucu reddedip son geçerli kaydı dönerse [rollback] ana iş parçacığında çağrılır.
+     */
+    fun save(level: Int, data: String, kills: Int, xp: Long, rollback: (String, String) -> Unit, done: ((Boolean) -> Unit)? = null) {
+        if (state.value == State.Off || sid.isEmpty()) { done?.invoke(false); return }
+        val args = signedSave(level, data, kills, xp)
+        Supa.bg {
+            val r = runCatching { JSONObject(Supa.rpcSync("zx_save3", args)) }
+            val ok = r.getOrNull()?.optBoolean("ok", true) == true
+            if (done != null) main.post { done(ok) }
+            r.onSuccess { o ->
+                if (!o.optBoolean("ok", true) && o.has("rollback")) main.post { rollback(o.optString("rollback"), o.optString("msg")) }
+            }.onFailure { e ->
+                val m = e.message.orEmpty()
+                if (m.startsWith("OTURUM|") || m.contains("BAN|") || m.startsWith("BAKIM|") || m.startsWith("HILE|")) main.post { kick(friendly(m)) }
+            }
+        }
+    }
+}

@@ -1,0 +1,426 @@
+//! V15: her bölge kare, kendi başına bir harita; aralarındaki boşluk karanlıktır (yürünmez, hiçbir şey yoktur).
+//! Eski yollar, bölgeler arası geçitler ve fazla karakollar kalktı; her bölgenin tek girişi (büyücü + doğuş) var.
+//! V12 bölgeler: dünya ayrı haritalara bölündü. Bölgeler arasında yürünmez (görünmez sınır, ötesi karanlık);
+//! bölgeden bölgeye yalnız Büyücü Aldric ışınlar (her bölgenin giriş karakolunda bir büyücü durur).
+//! Harita ekranı yalnız bulunulan bölgeyi gösterir; büyücünün haritasında bölgeye dokununca yaratıklar, ganimet,
+//! önerilen seviye ve ücret yazar.
+#[allow(unused_imports)]
+use crate::Hyp;
+use crate::data::{ZKind, ZOMBIES};
+use crate::world::{self, Zone, TILE};
+use serde_json::{json, Value};
+
+pub struct Area {
+    pub id: &'static str,
+    pub name: &'static str,
+    /// karo cinsinden dikdörtgenler (x0, y0, x1, y1); birleşimi bölgedir
+    pub rects: &'static [(f32, f32, f32, f32)],
+    /// büyücünün ışınlaması için gereken seviye
+    pub level: u32,
+    /// önerilen seviye aralığı
+    pub rec: (u32, u32),
+    pub cost: u32,
+    pub zones: &'static [Zone],
+    pub desc: &'static str,
+}
+
+pub const FOREST: usize = 0;
+pub const CITY: usize = 1;
+pub const FRONT: usize = 6;
+pub const HOME: usize = 7;
+/// Titan'ın uyanabildiği bölgeler (başlangıç ormanı, cephe ve kişisel üs hariç)
+pub const TITAN_AREAS: &[usize] = &[1, 2, 3, 4, 5];
+/// Titan dilimi (sn)
+pub const TITAN_SLOT: f64 = 900.0;
+
+/// V15 kare bölgeler (karo): (x0, y0, kenar). Eski dünyanın içeriği bu karelerin içinde kalır; dışı boşluktur.
+/// Cephe Hattı eski doğu/güney şeridin yerine kuzeydoğuda tek bir karedir (üsler ızgarada, bkz. bases.rs).
+pub const SQUARES: [(f32, f32, f32); 8] = [
+    (66.0, 152.0, 208.0),  // Başlangıç Ormanı (kamp güneyde)
+    (130.0, 0.0, 152.0),   // Yıkık Şehir (güney kenarı şehir suru)
+    (370.0, 60.0, 210.0),  // Yanık Orman
+    (190.0, 380.0, 170.0), // Çöl Otoyolu
+    (8.0, 380.0, 170.0),   // Kara Bataklık
+    (380.0, 380.0, 220.0), // Donmuş Liman
+    (596.0, 0.0, 300.0),   // Cephe Hattı
+    // Kişisel Üs (çevre duvarı kenarın bir karo içinde kalsın)
+    (world::HOME_X0 as f32 - 2.0, world::HOME_Y0 as f32 - 2.0, (world::HOME_X1 - world::HOME_X0) as f32 + 5.0),
+];
+
+const fn sq(i: usize) -> (f32, f32, f32, f32) {
+    let (x, y, s) = SQUARES[i];
+    (x, y, x + s, y + s)
+}
+
+pub const AREAS: &[Area] = &[
+    Area { id: "forest", name: "Başlangıç Ormanı", rects: &[sq(0)], level: 1, rec: (1, 15), cost: 0,
+        zones: &[Zone::Camp, Zone::Forest, Zone::DeepForest, Zone::Swamp],
+        desc: "Kamp, sahra hastanesi ve köpek barınağı burada. Kampın çevresi sakin; doğuya ve bataklığa gittikçe zombiler sertleşir." },
+    Area { id: "city", name: "Yıkık Şehir", rects: &[sq(1)], level: 10, rec: (10, 50), cost: 30,
+        zones: &[Zone::SafeCity, Zone::Suburb, Zone::Downtown, Zone::Industrial, Zone::BossArena],
+        desc: "Güvenli bölgeden banliyöye, merkeze ve sanayiye. Elektronik, dişli, pil ve paslı anahtar burada." },
+    Area { id: "burnt", name: "Yanık Orman", rects: &[sq(2)], level: 15, rec: (15, 25), cost: 45,
+        zones: &[Zone::BurntForest],
+        desc: "Yangından geriye kül ve kömürleşmiş ağaçlar kaldı. Koşucular ve karanlık zombiler dumanın içinde avlanır." },
+    Area { id: "desert", name: "Çöl Otoyolu", rects: &[sq(3)], level: 20, rec: (20, 30), cost: 60,
+        zones: &[Zone::Desert],
+        desc: "Kumla örtülmüş otoyol ve terk edilmiş araçlar. Tank zombiler ve kuduz köpek sürüleri dolaşır." },
+    Area { id: "bswamp", name: "Kara Bataklık", rects: &[sq(4)], level: 25, rec: (25, 35), cost: 75,
+        zones: &[Zone::BlackSwamp],
+        desc: "Zehirli sis ve kara su. Toksik zombilerin yuvası; gizemli maskeliler de görülmüş." },
+    Area { id: "harbor", name: "Donmuş Liman", rects: &[sq(5)], level: 40, rec: (40, 50), cost: 100,
+        zones: &[Zone::Harbor],
+        desc: "Buzla kaplı rıhtım ve konteynerler. Dünyanın en tehlikeli zombileri burada." },
+    Area { id: "front", name: "Cephe Hattı", rects: &[sq(6)], level: 10, rec: (28, 50), cost: 40,
+        zones: &[Zone::Front],
+        desc: "Devlet ve klan üslerinin kapıştığı savaş alanı. Zombi yok: üsleri askerler (botlar) korur. Klanınla üs ele geçir." },
+    Area { id: "home", name: "Kişisel Üssüm", rects: &[sq(7)],
+        level: 1, rec: (1, 50), cost: 0, zones: &[Zone::Home],
+        desc: "Yalnız senin görebildiğin, duvarla çevrili güvenli üs. Sandıklarını burada kurarsın." },
+];
+
+/// Nokta tam olarak hangi bölgenin karesinde (boşluktaysa None)
+pub fn area_exact(x: f32, y: f32) -> Option<usize> {
+    let (tx, ty) = (x / TILE, y / TILE);
+    AREAS.iter().position(|a| a.rects.iter().any(|&(x0, y0, x1, y1)| tx >= x0 && tx < x1 && ty >= y0 && ty < y1))
+}
+
+/// Dünya pikselinin bölgesi (AREAS sırası); boşluktaki nokta için en yakın bölge
+pub fn area_at(x: f32, y: f32) -> usize {
+    area_exact(x, y).unwrap_or_else(|| {
+        let (tx, ty) = (x / TILE, y / TILE);
+        let dist = |a: &Area| {
+            a.rects.iter().map(|&(x0, y0, x1, y1)| (tx.clamp(x0, x1) - tx).hyp(ty.clamp(y0, y1) - ty)).fold(f32::MAX, f32::min)
+        };
+        (0..AREAS.len()).min_by(|&a, &b| dist(&AREAS[a]).total_cmp(&dist(&AREAS[b]))).unwrap_or(FOREST)
+    })
+}
+
+/// Bölge sınırı görünmez duvardır: (ox, oy) bölgesinden çıkan hareket (boşluğa ya da başka bölgeye) eksen eksen geri
+/// alınır (sınır boyunca kayılır). Sınıra takıldıysa true.
+pub fn clamp(ox: f32, oy: f32, x: &mut f32, y: &mut f32) -> bool {
+    let a = area_exact(ox, oy);
+    if area_exact(*x, *y) == a {
+        return false;
+    }
+    if area_exact(*x, oy) == a {
+        *y = oy;
+    } else if area_exact(ox, *y) == a {
+        *x = ox;
+    } else {
+        *x = ox;
+        *y = oy;
+    }
+    true
+}
+
+/// Bölgenin giriş noktası (büyücü ışınlaması ve ölünce doğma): bölgenin güvenli karakolu
+pub fn hub(i: usize) -> (f32, f32) {
+    let post = |id: &str| {
+        let l = world::landmark(id);
+        (l.tx * TILE, (l.ty + 2.5) * TILE)
+    };
+    match AREAS.get(i).map(|a| a.id).unwrap_or("forest") {
+        "city" => world::city_spawn(),
+        "burnt" => post("burnt_post"),
+        "desert" => post("desert_post"),
+        "bswamp" => post("bswamp_post"),
+        "harbor" => post("harbor_post"),
+        "front" => world::front_spawn(),
+        "home" => world::home_spawn(),
+        _ => world::camp_spawn(),
+    }
+}
+
+/// Bölgedeki yaratıklar: (tür, en düşük seviye, en yüksek seviye), ağırlığa göre sıralı (Titan ayrıca: titan_area)
+pub fn creatures(i: usize) -> Vec<(ZKind, u32, u32)> {
+    let mut out: Vec<(ZKind, u32, u32, u32)> = Vec::new();
+    for z in AREAS[i].zones {
+        let (lo, hi) = z.level_range();
+        for &(k, w) in z.spawns() {
+            match out.iter_mut().find(|e| e.0 == k) {
+                Some(e) => {
+                    e.1 = e.1.min(lo);
+                    e.2 = e.2.max(hi);
+                    e.3 += w;
+                }
+                None => out.push((k, lo, hi, w)),
+            }
+        }
+    }
+    out.sort_by_key(|o| std::cmp::Reverse(o.3));
+    out.into_iter().map(|(k, lo, hi, _)| (k, lo, hi)).collect()
+}
+
+/// Bölgede çıkan eşyalar: önce bölgeye özel malzemeler (data::region_items), sonra temel malzemeler ve nadir hazır eşyalar
+pub fn drops(i: usize) -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = Vec::new();
+    let mut add = |v: &[&'static str]| {
+        for id in v {
+            if !out.contains(id) {
+                out.push(id);
+            }
+        }
+    };
+    for z in AREAS[i].zones {
+        let ids: Vec<&'static str> = crate::data::region_items(*z).iter().map(|e| e.0).collect();
+        add(&ids);
+    }
+    let kinds = creatures(i);
+    if !kinds.is_empty() {
+        add(&["bone", "cloth"]);
+    }
+    for (k, _, _) in kinds {
+        add(match k {
+            ZKind::Dog => &["leather"],
+            ZKind::Tank => &["scrap"],
+            ZKind::Dark => &["neck_dark"],
+            ZKind::Mystery => &["ring_hunter", "neck_amulet"],
+            _ => &[],
+        });
+    }
+    out
+}
+
+impl crate::game::Game {
+    /// Büyücü haritası: tüm bölgeler (sınırlar, giriş noktası, kilit, yaratıklar, ganimet)
+    pub fn areas_json(&self) -> Value {
+        let here = area_at(self.player.x, self.player.y);
+        let lv = self.progress.level;
+        let list: Vec<Value> = AREAS
+            .iter()
+            .enumerate()
+            .map(|(i, a)| {
+                let (hx, hy) = hub(i);
+                // V13: önce bölgenin kendi yaratıkları (temel türün seviye aralığıyla)
+                let ranges = creatures(i);
+                let active: Vec<&crate::data::Species> =
+                    crate::data::SPECIES.iter().filter(|s| s.area == a.id && crate::data::species_active(s)).collect();
+                let mut mobs: Vec<Value> = active
+                    .iter()
+                    .map(|s| {
+                        let (lo, hi) = ranges.iter().find(|r| r.0 == s.base).map(|r| (r.1, r.2)).unwrap_or(a.rec);
+                        json!({ "name": s.name, "sprite": format!("z/{}/idle_0_0", s.id), "lo": lo, "hi": hi, "color": ZOMBIES[s.base as usize].color })
+                    })
+                    .collect();
+                // bölge türü aynı rolü üstlendiyse klasik görünüş o bölgede çıkmaz: listede de yok
+                mobs.extend(creatures(i)
+                    .iter()
+                    .filter(|&&(k, _, _)| !active.iter().any(|s| s.base == k))
+                    .map(|&(k, lo, hi)| {
+                        let d = &ZOMBIES[k as usize];
+                        json!({ "name": d.name, "sprite": format!("z/{}/idle_0_0", d.sprite), "lo": lo, "hi": hi, "color": d.color })
+                    }));
+                if i == self.titan.1 && !self.titan_dead {
+                    let d = &ZOMBIES[ZKind::Titan as usize];
+                    mobs.insert(0, json!({ "name": format!("{} (Şimdi Burada!)", d.name), "sprite": "z/magma/idle_0_0", "lo": 50, "hi": 50, "color": d.color }));
+                }
+                if i == FRONT {
+                    mobs.push(json!({ "name": "Üs Askeri (Bot)", "sprite": "npc/soldier", "lo": 28, "hi": 50, "color": 0xFFC8D0A0u32 }));
+                    mobs.push(json!({ "name": "Keskin Nişancı (Bot)", "sprite": "npc/soldier", "lo": 28, "hi": 50, "color": 0xFFE0C080u32 }));
+                    mobs.push(json!({ "name": "Kalkanlı Asker (Bot)", "sprite": "z/shieldbot/idle_0_0", "lo": 28, "hi": 50, "color": 0xFF9AC0E0u32 }));
+                    mobs.push(json!({ "name": "Alev Makineli Asker (Bot)", "sprite": "z/flamebot/idle_0_0", "lo": 28, "hi": 50, "color": 0xFFFF9A4Au32 }));
+                }
+                json!({
+                    "id": a.id, "name": a.name, "desc": a.desc, "i": i,
+                    "rects": a.rects.iter().map(|&(x0, y0, x1, y1)| json!([x0 * TILE, y0 * TILE, x1 * TILE, y1 * TILE])).collect::<Vec<_>>(),
+                    "hub": [hx, hy], "level": a.level, "rec": [a.rec.0, a.rec.1], "cost": a.cost,
+                    "here": i == here, "open": lv >= a.level, "safe": a.zones.iter().all(|z| z.safe()),
+                    "mobs": mobs, "drops": drops(i), "titan": i == self.titan.1 && !self.titan_dead,
+                })
+            })
+            .collect();
+        let (_, ta, tx, ty) = self.titan;
+        json!({ "areas": list, "here": here, "gold": self.progress.gold, "cd": self.wiz_cd.max(0.0), "near": self.near_wizard(),
+            "titan": { "area": ta, "name": AREAS.get(ta).map(|a| a.name), "x": tx, "y": ty, "left": self.titan_left(), "dead": self.titan_dead },
+            // gezgin tüccar kamyonetleri (haritada işaret)
+            "merchant": self.caravans.iter().map(|c| { let p = self.caravan_park(c);
+                json!({ "x": c.x, "y": c.y, "parked": c.parked, "area": c.area, "park": [p.0, p.1] }) }).collect::<Vec<_>>() })
+    }
+
+    /// Titan zaman dilimi (15 dk): sunucu saati (üs saati) geldiyse onunla (her oyuncuda aynı), yoksa oyun süresiyle
+    pub fn titan_slot(&self) -> i64 {
+        if self.base_clock > 0.0 {
+            (self.base_clock / (TITAN_SLOT * 1000.0)) as i64
+        } else {
+            // çevrimdışı: oyun süresiyle (oturumlar arası artar; her girişte 0. dilime dönüp Titan'ı yeniden doğurmaz)
+            (self.progress.play_time / TITAN_SLOT) as i64
+        }
+    }
+
+    /// Dilimin Titan'ı: bölge ve yer (tohum + dilimden; her istemcide aynı). Güvenli olmayan, boş bir yer seçilir.
+    pub fn titan_spot(&self, slot: i64) -> (usize, f32, f32) {
+        let mut rng = crate::rng::Rng::new(self.world.seed ^ 0x7174_A400 ^ (slot as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+        let a = TITAN_AREAS[rng.below(TITAN_AREAS.len() as u32) as usize];
+        let mut scratch = Vec::new();
+        for _ in 0..60 {
+            let r = AREAS[a].rects[0];
+            let tx = rng.range(r.0 + 20.0, r.2 - 20.0);
+            let ty = rng.range(r.1 + 20.0, r.3 - 20.0);
+            let (x, y) = (tx * TILE, ty * TILE);
+            let z = self.world.zone(x, y);
+            if !z.safe() && z != Zone::Wall && area_at(x, y) == a && !self.world.blocked(x, y, 40.0, &mut scratch) {
+                return (a, x, y);
+            }
+        }
+        let (hx, hy) = hub(a);
+        (a, hx + 30.0 * TILE, hy)
+    }
+
+    /// V12.1: Titan her 15 dakikada başka bir bölgede uyanır (sabit arena yok). Dilim değişince eskisi kaybolur ve
+    /// herkese duyurulur; oyuncu yaklaşınca doğar; o dilimde öldürülürse bir sonrakine kadar gelmez.
+    pub(crate) fn update_titan(&mut self, px: f32, py: f32) {
+        let slot = self.titan_slot();
+        if slot != self.titan.0 {
+            let (a, x, y) = self.titan_spot(slot);
+            let first = self.titan.0 == i64::MIN;
+            self.titan = (slot, a, x, y);
+            // bu dilimde zaten öldürüldüyse (çıkıp yeniden girdiysek) yeniden doğmaz
+            self.titan_dead = self.progress.titan_killed == slot;
+            self.zombies.retain(|z| !z.boss);
+            if !first {
+                self.msg(format!("TİTAN {} bölgesinde uyandı! 15 dakika orada kalacak.", AREAS[a].name));
+            }
+        }
+        let (_, _, bx, by) = self.titan;
+        let alive = self.zombies.iter().any(|z| z.boss && z.state != crate::game::ZState::Dead);
+        if !alive && !self.titan_dead && (bx - px).hyp(by - py) < 1600.0 {
+            self.spawn_zombie_at(ZKind::Titan, 50, bx, by);
+            self.events.push(crate::game::Event::Boss { name: "TİTAN".into() });
+        }
+    }
+
+    /// Titan'ın kalan süresi (sn, dilim sonuna kadar)
+    pub fn titan_left(&self) -> f32 {
+        if self.base_clock > 0.0 {
+            (TITAN_SLOT - (self.base_clock / 1000.0) % TITAN_SLOT) as f32
+        } else {
+            (TITAN_SLOT - self.progress.play_time % TITAN_SLOT) as f32
+        }
+    }
+
+    /// Oyuncu bir büyücünün yanında mı (büyücü haritası yalnız onunla konuşurken açılır)
+    pub fn near_wizard(&self) -> bool {
+        let (px, py) = (self.player.x, self.player.y);
+        self.npcs.iter().any(|n| n.kind == crate::story::N_WIZARD && (n.x - px).hyp(n.y - py) < 6.0 * crate::data::PX_PER_M)
+    }
+}
+
+
+/// V13 bölge zemini: ortak malzemeyi bölgenin kendi dokusuna çevirir (ana, ikinci, yol). Beton (güvenli bölge, karargâh)
+/// ve üs içi çakıl olduğu gibi kalır. Bölge dokuları yalnız o bölgedeyken yüklenir (ground::R_*).
+pub fn region_ground(area: usize, m: u8, alt_noise: f32) -> u8 {
+    use crate::world::ground::*;
+    let (main, alt, path) = (R_MAIN, R_ALT, R_PATH);
+    match (AREAS[area].id, m) {
+        (_, CONCRETE) => m,
+        ("forest", GRASS | DRY_GRASS) => if alt_noise > 0.72 { alt } else { main },
+        ("forest", DARK_GRASS | MUD) => alt,
+        ("forest", DIRT | GRAVEL) => path,
+        ("city", ASPHALT) => main,
+        ("city", SIDEWALK | GRASS | DRY_GRASS | DARK_GRASS) => alt,
+        ("city", DIRT | GRAVEL) => path,
+        ("burnt", ASH | GRASS | DARK_GRASS) => if alt_noise > 0.74 { alt } else { main },
+        ("burnt", DRY_GRASS) => alt,
+        ("burnt", DIRT | GRAVEL) => path,
+        ("desert", DRY_GRASS | GRASS | DIRT | GRAVEL) => if alt_noise > 0.8 { alt } else { main },
+        ("desert", DESERT_ROAD | ASPHALT) => path,
+        ("bswamp", MUD | DARK_GRASS | GRASS) => main,
+        ("bswamp", SWAMP) => alt,
+        ("bswamp", DIRT | GRAVEL) => path,
+        ("harbor", SNOW_DOCK) => if alt_noise > 0.7 { alt } else { main },
+        ("harbor", ASPHALT | GRAVEL | DIRT) => path,
+        ("front", MUD | BASE_DIRT) => main,
+        ("front", DRY_GRASS | GRASS) => alt,
+        ("front", DIRT) => path,
+        ("home", GRASS | DRY_GRASS | DARK_GRASS) => main,
+        ("home", BASE_DIRT | DIRT | GRAVEL) => path,
+        _ => m,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[allow(unused_imports)]
+    use crate::Hyp;
+    use super::*;
+
+    #[test]
+    fn hubs_are_safe_and_inside_their_area() {
+        let g = crate::game::Game::new(7, crate::Progress::default(), 0);
+        for (i, a) in AREAS.iter().enumerate() {
+            let (x, y) = hub(i);
+            assert_eq!(area_at(x, y), i, "{} girişi kendi bölgesinde değil", a.id);
+            assert!(g.world.zone(x, y).safe(), "{} girişi güvenli değil", a.id);
+            // her bölgenin girişinde büyücü var
+            assert!(
+                g.npcs.iter().any(|n| n.kind == crate::story::N_WIZARD && area_at(n.x, n.y) == i && (n.x - x).hyp(n.y - y) < 20.0 * TILE),
+                "{} girişinde büyücü yok",
+                a.id
+            );
+        }
+    }
+
+    #[test]
+    fn titan_moves_every_slot_and_stays_dead_when_killed() {
+        let mut g = crate::game::Game::new(7, crate::Progress::default(), 0);
+        let mut seen = std::collections::HashSet::new();
+        for slot in 0..40 {
+            let (a, x, y) = g.titan_spot(slot);
+            assert!(TITAN_AREAS.contains(&a));
+            assert_eq!(area_at(x, y), a);
+            assert!(!g.world.zone(x, y).safe());
+            assert_eq!(g.titan_spot(slot), (a, x, y), "aynı dilim aynı yer");
+            seen.insert(a);
+        }
+        assert!(seen.len() >= 4, "Titan hep aynı bölgelerde: {seen:?}");
+        // sunucu saatiyle dilim; yaklaşınca doğar
+        g.base_clock = 1_800_000_000_000.0;
+        g.update_titan(0.0, 0.0);
+        let (_, _, bx, by) = g.titan;
+        g.update_titan(bx, by + 300.0);
+        assert!(g.zombies.iter().any(|z| z.boss));
+        // öldürüldü: dilim bitene kadar gelmez
+        g.zombies.clear();
+        g.titan_dead = true;
+        g.update_titan(bx, by + 300.0);
+        assert!(!g.zombies.iter().any(|z| z.boss));
+        // yeni dilim: başka yer ve yeniden uyanır
+        g.base_clock += TITAN_SLOT * 1000.0;
+        g.update_titan(0.0, 0.0);
+        assert!(!g.titan_dead);
+    }
+
+    #[test]
+    fn areas_cover_the_map() {
+        for ty in (0..world::MAP_TILES).step_by(7) {
+            for tx in (0..world::MAP_TILES).step_by(7) {
+                let i = area_at(tx as f32 * TILE + 1.0, ty as f32 * TILE + 1.0);
+                assert!(i < AREAS.len());
+            }
+        }
+        assert_eq!(area_at(world::CAMP.0, world::CAMP.1), FOREST);
+        assert_eq!(area_at(world::BOSS.0, world::BOSS.1), CITY);
+        for b in crate::bases::base_defs() {
+            let (x, y) = b.pos();
+            assert_eq!(area_at(x, y), FRONT, "üs {} Cephe Hattı'nda değil", b.id);
+        }
+    }
+
+    #[test]
+    fn front_has_no_zombies_and_every_area_lists_info() {
+        assert!(creatures(FRONT).is_empty());
+        assert!(Zone::Front.spawns().is_empty());
+        for (i, a) in AREAS.iter().enumerate() {
+            if i != FRONT && i != HOME {
+                assert!(!creatures(i).is_empty(), "{}", a.id);
+                assert!(!drops(i).is_empty(), "{}", a.id);
+            }
+        }
+        for i in 0..AREAS.len() {
+            for id in drops(i) {
+                assert!(crate::data::resolve_item_id(id).is_some(), "bilinmeyen eşya {id}");
+            }
+        }
+    }
+}
