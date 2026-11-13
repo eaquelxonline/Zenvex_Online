@@ -14,11 +14,10 @@ fn main() {
             let name = p.file_stem().unwrap().to_string_lossy().to_string();
             let im = image::open(dir.join(format!("{name}.webp"))).unwrap().to_rgba8();
             s.load(&name, &std::fs::read(&p).unwrap(), im.width() as usize, im.height() as usize, im.as_raw()).unwrap();
-            if std::env::var("NOBUMP").is_err() {
-                if let Ok(nm) = image::open(dir.join(format!("{name}_n.webp"))) {
-                    let nm = nm.to_rgba8();
-                    s.load_normal(&name, nm.width() as usize, nm.height() as usize, nm.as_raw());
-                }
+            if std::env::var("NOBUMP").is_err()
+                && let Ok(nm) = image::open(dir.join(format!("{name}_n.webp"))) {
+                let nm = nm.to_rgba8();
+                s.load_normal(&name, nm.width() as usize, nm.height() as usize, nm.as_raw());
             }
         }
     }

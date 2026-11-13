@@ -12,7 +12,7 @@ android {
     // Android 9 (API 28) ve sonrası; Android 16 (API 36) hedeflenir, Android 17 (API 37) cihazlarda da çalışır
     // Android 17 (API 37) SDK'sıyla derlenir (güncel Compose bunu ister); davranış hedefi Android 16 (API 36)
     compileSdk = 37
-    ndkVersion = "27.2.12479018"
+    ndkVersion = "30.0.16248370"
 
     defaultConfig {
         applicationId = "com.zenvex.online"

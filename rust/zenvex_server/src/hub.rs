@@ -71,10 +71,9 @@ impl Hub {
     }
 
     fn send(&mut self, id: u64, text: &str) {
-        if let Some(c) = self.clients.get(&id) {
-            if c.tx.send(Outbox::Text(text.to_string())).is_ok() {
-                self.msgs_out += 1;
-            }
+        if let Some(c) = self.clients.get(&id)
+            && c.tx.send(Outbox::Text(text.to_string())).is_ok() {
+            self.msgs_out += 1;
         }
     }
 
@@ -390,15 +389,13 @@ pub mod loadtest {
                 let reader = tokio::spawn(async move {
                     while let Some(Ok(Message::Text(t))) = rx.next().await {
                         recv.fetch_add(1, Ordering::Relaxed);
-                        if let Ok(v) = serde_json::from_str::<Value>(&t) {
-                            if v["t"] == "pong" {
-                                if let Some(at) = sa.lock().unwrap().remove(&v["i"].as_u64().unwrap_or(0)) {
-                                    let ms = at.elapsed().as_millis() as u64;
-                                    ps.fetch_add(ms, Ordering::Relaxed);
-                                    pn.fetch_add(1, Ordering::Relaxed);
-                                    pm.fetch_max(ms, Ordering::Relaxed);
-                                }
-                            }
+                        if let Ok(v) = serde_json::from_str::<Value>(&t)
+                            && v["t"] == "pong"
+                            && let Some(at) = sa.lock().unwrap().remove(&v["i"].as_u64().unwrap_or(0)) {
+                            let ms = at.elapsed().as_millis() as u64;
+                            ps.fetch_add(ms, Ordering::Relaxed);
+                            pn.fetch_add(1, Ordering::Relaxed);
+                            pm.fetch_max(ms, Ordering::Relaxed);
                         }
                     }
                 });

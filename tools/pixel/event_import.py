@@ -1,7 +1,6 @@
 """Etkinlik eşyaları (docs/20 A1-A3) → oyun.
 
   i_ev_<etkinlik>_<ring|neck|weapon>.*  → atlas i/ev_<etkinlik>_<yuva> (simge; ışıltılı, yumuşak zemin silme)
-  art_ev_<etkinlik>_<yuva>.*            → assets/ui/art_ev_<etkinlik>_<yuva>.webp (ödül ekranındaki tanıtım afişi)
   w_ev_<etkinlik>.*                     → atlas w/ev_<etkinlik> (elde tutulan piksel silah; çapa = kabza)
 
 Elde tutma: kahramanın katana / bıçak karelerinden (anahtar@katana, anahtar@knife) silahın kabza ve uç noktası çıkarılır
@@ -58,20 +57,6 @@ def icons(src):
             im = im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
             add.append((f"i/ev_{e}_{slot}", im, im.width / 2, im.height / 2, ICON_WORLD[slot] / max(im.size)))
     return add
-
-
-def posters(src):
-    for e in EVENTS:
-        for slot in ("ring", "neck", "weapon"):
-            p = find(src, f"art_ev_{e}_{slot}")
-            if not p:
-                print("eksik afiş", e, slot)
-                continue
-            im = Image.open(p).convert("RGB")
-            s = 720 / im.width
-            if s < 1:
-                im = im.resize((720, round(im.height * s)), Image.LANCZOS)
-            im.save(os.path.join(UI, f"art_ev_{e}_{slot}.webp"), "WEBP", quality=86, method=6)
 
 
 def block_size(a):
@@ -183,7 +168,6 @@ def segments(A):
 
 
 def main(src):
-    posters(src)
     A = Atlas()
     A.patch("items", add=icons(src))
     wadd, wmeta = weapons(src, A)

@@ -2089,10 +2089,9 @@ impl World {
             let (cx, cy) = cell(x, y);
             for dy in -1..=1 {
                 for dx in -1..=1 {
-                    if let Some(v) = grid.get(&(cx + dx, cy + dy)) {
-                        if v.iter().any(|&(sx, sy, sr)| (sx - x).hyp(sy - y) < sr + r) {
-                            return false;
-                        }
+                    if let Some(v) = grid.get(&(cx + dx, cy + dy))
+                        && v.iter().any(|&(sx, sy, sr)| (sx - x).hyp(sy - y) < sr + r) {
+                        return false;
                     }
                 }
             }

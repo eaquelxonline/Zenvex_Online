@@ -1355,14 +1355,13 @@ impl Game {
         }
         // araçtayken hasarın çoğunu araç alır (araba hepsini, motosiklet %70'ini); araç canı 0'da patlar
         let mut amount = amount;
-        if let Some(vi) = self.player.vehicle {
-            if let Some(v) = self.vehicles.get_mut(vi) {
-                let share = crate::data::veh_slot(v.kind).map_or(1.0, |s| crate::data::VEH_ABSORB[s]);
-                v.hp -= amount * share;
-                amount *= 1.0 - share;
-                if amount <= 0.0 {
-                    return;
-                }
+        if let Some(vi) = self.player.vehicle
+            && let Some(v) = self.vehicles.get_mut(vi) {
+            let share = crate::data::veh_slot(v.kind).map_or(1.0, |s| crate::data::VEH_ABSORB[s]);
+            v.hp -= amount * share;
+            amount *= 1.0 - share;
+            if amount <= 0.0 {
+                return;
             }
         }
         let armor = self.progress.armor();

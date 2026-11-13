@@ -35,7 +35,7 @@ art/                concept art and screenshots
 # Rust: tests and lints (run from rust/)
 cargo test --workspace && cargo clippy --workspace --all-targets -- -D warnings
 
-# Android: needs the Android SDK 37, NDK 27 and cargo-ndk
+# Android: needs the Android SDK 37, NDK 30 and cargo-ndk
 cd android && ./gradlew :app:assembleDebug
 
 # UI snapshot tests (JVM, no emulator)

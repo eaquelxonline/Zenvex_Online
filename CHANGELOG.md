@@ -2,6 +2,18 @@
 
 ## Unreleased (V16 — 3D)
 
+- V22 toolchain refresh (all tools on the latest stable release, checked against the registries on 13 Nov 2026):
+  - Gradle 9.8.2 → 9.9.1 (wrapper regenerated), Android Gradle Plugin 9.4.1 → 9.5.1, NDK 27.2 → 30.0.16248370 (LTS),
+    build-tools 36.0.0 → 37.0.0, CI JDK 21 → 25 (Temurin LTS); Kotlin 2.4.21, Compose BOM 2026.09.00, Billing 9.1.0,
+    OkHttp 5.5.1 and the other AndroidX libraries were already the newest stable versions
+  - Rust: stable 1.100, edition 2021 → 2024 (nested `if let` blocks became let-chains), `jni` 0.21 → 0.22.4 (native methods
+    take `EnvUnowned` and run inside `with_env`; a Rust error or panic now becomes a Java RuntimeException instead of
+    aborting the process), serde/serde_json/image pinned to their newest patch releases, cargo-ndk 4.1.2
+  - CI: actions already on their newest major tags; the render job installs bpy 5.3.0 (Blender 5.3, Python 3.13 only),
+    the pack job uses Python 3.15
+  - removed the dead event-poster export from `tools/pixel/event_import.py` (it would have re-created the deleted
+    `art_ev_*.webp` files); the project starts with a fresh git history
+
 - V21 fixes:
   - crafting: the craft screen refreshes every 0.7 s, so materials granted by a quest count without leaving and re-entering; hand
     crafting and the workbench show the same recipe list with the same materials (bench-only recipes say "workbench needed" by hand)

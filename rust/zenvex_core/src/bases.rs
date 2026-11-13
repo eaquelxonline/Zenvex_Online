@@ -523,12 +523,11 @@ impl Game {
                 best = (Target::Player, p.x, p.y, d);
             }
         }
-        if hostile && self.player.vehicle.is_none() {
-            if let Some(dg) = self.dog.as_ref().filter(|d| d.dead_t <= 0.0) {
-                let d = (dg.x - s.x).hyp(dg.y - s.y);
-                if d < best.3 {
-                    best = (Target::Dog, dg.x, dg.y, d);
-                }
+        if hostile && self.player.vehicle.is_none()
+            && let Some(dg) = self.dog.as_ref().filter(|d| d.dead_t <= 0.0) {
+            let d = (dg.x - s.x).hyp(dg.y - s.y);
+            if d < best.3 {
+                best = (Target::Dog, dg.x, dg.y, d);
             }
         }
         for z in &self.zombies {
@@ -760,10 +759,9 @@ impl Game {
                     self.spawn_drop_id(id, 1, x, y);
                 }
                 // Cephe Hattı'nın özel malzemeleri (barut kesesi, devre kartı) askerlerden düşer
-                if self.rng.chance(0.35) {
-                    if let Some(id) = self.region_pick(crate::world::Zone::Front) {
-                        self.spawn_drop_id(id, 1, x, y);
-                    }
+                if self.rng.chance(0.35)
+                    && let Some(id) = self.region_pick(crate::world::Zone::Front) {
+                    self.spawn_drop_id(id, 1, x, y);
                 }
             }
         }

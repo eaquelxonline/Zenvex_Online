@@ -315,21 +315,20 @@ impl Service {
         let mut items = vec![Item { model: m, pos: &pos, nrm: &nrm, range: None, id: 1, glow: 0.0 }];
         // motosiklet sürücüsü: oturma pozunda, eyerin üstünde
         let mut rider_ok = false;
-        if !r.rider.is_empty() {
-            if let (Some(cm), Some(sk)) = (self.models.get(r.rider), self.skels.get(r.rider)) {
-                let inp = In::new(anim::a::RIDE, r.rider_t, 1.0, Wk::None, Style::of(r.rider));
-                let mut out = anim::evaluate(sk, &inp);
-                // oturma pozundaki kalça eklemi eyerin üstüne (kalça kemiği eyer yüzeyinden ~10 cm yukarıda)
-                let seat = seat_of(m);
-                let hip = out.world[rig::PELVIS].apply(sk.head[rig::PELVIS]);
-                let place = Xf::new(M3::IDENTITY, seat + v3(0.0, 0.0, 0.10 * sk.height / 1.86) - hip).then(&body);
-                for x in out.world.iter_mut() {
-                    *x = x.then(&place);
-                }
-                rig::skin(cm, &out.world, &mut self.bp, &mut self.bn);
-                rider_ok = true;
-                let _ = cm;
+        if !r.rider.is_empty()
+            && let (Some(cm), Some(sk)) = (self.models.get(r.rider), self.skels.get(r.rider)) {
+            let inp = In::new(anim::a::RIDE, r.rider_t, 1.0, Wk::None, Style::of(r.rider));
+            let mut out = anim::evaluate(sk, &inp);
+            // oturma pozundaki kalça eklemi eyerin üstüne (kalça kemiği eyer yüzeyinden ~10 cm yukarıda)
+            let seat = seat_of(m);
+            let hip = out.world[rig::PELVIS].apply(sk.head[rig::PELVIS]);
+            let place = Xf::new(M3::IDENTITY, seat + v3(0.0, 0.0, 0.10 * sk.height / 1.86) - hip).then(&body);
+            for x in out.world.iter_mut() {
+                *x = x.then(&place);
             }
+            rig::skin(cm, &out.world, &mut self.bp, &mut self.bn);
+            rider_ok = true;
+            let _ = cm;
         }
         if rider_ok {
             let cm = self.models.get(r.rider).unwrap();

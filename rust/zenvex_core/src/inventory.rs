@@ -391,14 +391,13 @@ impl Inventory {
             if left == 0 {
                 break;
             }
-            if let Some(sl) = s {
-                if sl.item as usize == item {
-                    let take = (sl.count as u32).min(left);
-                    sl.count -= take as u16;
-                    left -= take;
-                    if sl.count == 0 {
-                        *s = None;
-                    }
+            if let Some(sl) = s
+                && sl.item as usize == item {
+                let take = (sl.count as u32).min(left);
+                sl.count -= take as u16;
+                left -= take;
+                if sl.count == 0 {
+                    *s = None;
                 }
             }
         }

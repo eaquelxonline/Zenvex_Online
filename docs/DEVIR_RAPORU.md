@@ -1,7 +1,8 @@
 # Devir Raporu — Zenvex Online (yeni oturum için)
 
 Hazırlanma: 12 Kasım 2026. Bu belge, projeyi hiç görmemiş yeni bir oturumun kaldığımız yerden sürmesi için yazıldı.
-Kullanıcıyla Türkçe konuş. Kullanıcı eaquel (GitHub hesabı kapandı; depo yalnız bu zip'te, yerel git geçmişiyle).
+Kullanıcıyla Türkçe konuş. Depo: GitHub `eaquelxonline/Zenvex_Online` (13 Kasım 2026'da zip'ten temiz geçmişle aktarıldı;
+eski geçmiş yalnız Drive'daki zip'te). Kullanıcı kuralı: sürüm bilgisi için her zaman internete/kayıtlara bak, eğitim verisine güvenme.
 
 ## 1. Proje
 - Android (Kotlin, Compose + özel Canvas oyun motoru) + Rust çekirdeği (`rust/zenvex_core`, JNI: `zenvex_jni`, 3B: `zenvex_r3d`,
@@ -20,6 +21,12 @@ Kullanıcıyla Türkçe konuş. Kullanıcı eaquel (GitHub hesabı kapandı; dep
 - Üretim veritabanına göç/edge dağıtımı: araç izin vermeyebilir (otomatik mod reddetti); kullanıcıdan izin iste.
 
 ## 3. Derleme ve test komutları
+- Araç zinciri (V22, 13 Kasım 2026'da kayıtlardan doğrulandı): JDK 25 (Temurin), Gradle 9.9.1, AGP 9.5.1, Kotlin 2.4.21,
+  SDK 37 + build-tools 37.0.0, NDK 30.0.16248370, Rust 1.100 (edition 2024), jni 0.22.4, cargo-ndk 4.1.2.
+  Sürüm denetimi: Gradle `services.gradle.org/versions/current`, Google Maven / Maven Central `maven-metadata.xml`,
+  `crates.io/api/v1/crates/<ad>`, SDK paketleri `dl.google.com/android/repository/repository2-3.xml`.
+- GameShotsTest referans görüntüleri `.gitignore`'da (yalnız 9 tanesi depoda); `verifyPaparazziDebug` bu yüzden GameShotsTest'te
+  hep düşer. Doğrulama için HudShotsTest/UiShotsTest/UiArtShotsTest'e bak, oyun karelerini `app/build/game-shots/` altında incele.
 - Rust: `cd rust/zenvex_core && cargo test` (87 test geçiyor). JNI: `cargo build -p zenvex_jni --release`.
 - Android sıkı derleme: `cd android && CI=true ./gradlew :app:compileDebugKotlin -x cargoBuild` (uyarı = hata). Testler:
   `:app:compileDebugUnitTestKotlin`; Paparazzi: `GameShotsTest`, `HudShotsTest`, `UiShotsTest`.
@@ -29,7 +36,9 @@ Kullanıcıyla Türkçe konuş. Kullanıcı eaquel (GitHub hesabı kapandı; dep
 - Görsel üretim istemleri: `docs/28_*` (V19) ve `docs/29_GORSEL_PROMPTLARI_V20.md`; gelen görseller `assets/ui/<ad>.png` olarak
   konunca kod değişmeden kullanılır (`btn_skills`, `btn_chars`, `btn_crate`, `btn_shop`, `skill_<istatistik>`).
 
-## 4. Bu oturumda yapılanlar (yerel commit'ler; GitHub'a itilemedi)
+## 4. V22 (13 Kasım 2026): araç zinciri yenileme — ayrıntı CHANGELOG'da. Dal: `ccr-1288dc35-tplllu`.
+
+## 4b. Önceki oturum (V21; yerel commit'ler, eski geçmişte)
 Commit sırası (eskiden yeniye): 11c94bc (M1+M2) → cabdde1 (M3 araçlar) → a273200 (M4 destek/yönetici) → e524c5f (M5 karakter kimlikleri,
 görsel kancaları, V20 prompt belgesi) → 0b2ef50 (V21). Depo bu zip'te; `git log` ile görülür. İtme: yeni bir GitHub deposu açılırsa
 `git remote set-url origin <yeni>` ve `git push -u origin <dal>` (dal: `ccr-f72bf0e8-k8itdv`).
@@ -77,7 +86,7 @@ M5 (karakter kimlikleri): `data.rs` CHAR_BASE (Kael hız/kaçınma, Lyra kritik/
    UiShotsTest çalıştırıp görsel kontrol et (özellikle motor simgesi ve sol üst rehber balonunun HUD ile çakışmaması).
 2. Kullanıcı görselleri `docs/29` istemlerinden üretip getirirse `assets/ui/` altına koy (kod hazır).
 3. Üretim göçlerini kullanıcı onayıyla uygula (yukarıdaki liste).
-4. GitHub: yeni depo bağlanınca dalı it; açık PR yok.
+4. GitHub: depo bağlı (`eaquelxonline/Zenvex_Online`); açık PR yok.
 5. Rehber tutorial'ı el üretiminde tezgâh tarifleri görünür olduğundan `Tut.craftWant()`/`wrongPlace` mantığını bir kez gözden geçir.
 
 ## 7. Dosya haritası (en çok dokunulanlar)

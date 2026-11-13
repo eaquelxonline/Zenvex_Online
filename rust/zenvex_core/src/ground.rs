@@ -190,11 +190,10 @@ pub fn render_scaled(world: &World, tex: &Textures, x0: f32, y0: f32, step: f32,
             // kenar bandı: en güçlü iki malzemenin farkı küçükse ikisi harmanlanır (genişlik ~ 10 px)
             let edge = acc[0].1 - acc[1].1;
             // V13: bulunulan bölgenin dışı (sınırın ötesi) bölgenin boşluk dokusu
-            if let Some(a) = tex.area {
-                if crate::areas::area_exact(wx + nx * warp * 1.4, wy + ny * warp * 1.4) != Some(a) {
-                    m = ground::R_VOID;
-                    m2 = ground::R_VOID;
-                }
+            if let Some(a) = tex.area
+                && crate::areas::area_exact(wx + nx * warp * 1.4, wy + ny * warp * 1.4) != Some(a) {
+                m = ground::R_VOID;
+                m2 = ground::R_VOID;
             }
             let sample = |mm: u8| -> u32 {
                 if !tex.ready() {

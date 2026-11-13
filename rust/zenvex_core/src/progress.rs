@@ -717,12 +717,11 @@ impl Progress {
         let mut fix = |slots: &mut Vec<Option<crate::inventory::Slot>>| {
             let mut add: Vec<(usize, u32)> = Vec::new();
             for s in slots.iter_mut() {
-                if let Some(cur) = *s {
-                    if let Some(&(_, to)) = map.iter().find(|(from, _)| *from == cur.item) {
-                        add.push((to, cur.count as u32));
-                        n += cur.count as u32;
-                        *s = None;
-                    }
+                if let Some(cur) = *s
+                    && let Some(&(_, to)) = map.iter().find(|(from, _)| *from == cur.item) {
+                    add.push((to, cur.count as u32));
+                    n += cur.count as u32;
+                    *s = None;
                 }
             }
             add

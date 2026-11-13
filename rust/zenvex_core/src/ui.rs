@@ -587,15 +587,14 @@ impl Game {
                             if left == 0 {
                                 break;
                             }
-                            if let Some(x) = s {
-                                if x.item as usize == it {
-                                    if (x.count as u64) <= left {
-                                        left -= x.count as u64;
-                                        *s = None;
-                                    } else {
-                                        x.count -= left as u16;
-                                        left = 0;
-                                    }
+                            if let Some(x) = s
+                                && x.item as usize == it {
+                                if (x.count as u64) <= left {
+                                    left -= x.count as u64;
+                                    *s = None;
+                                } else {
+                                    x.count -= left as u16;
+                                    left = 0;
                                 }
                             }
                         }
@@ -850,10 +849,9 @@ impl Game {
                         }
                     }
                     for k in crate::progress::Equipment::KEYS {
-                        if let Some(e) = self.progress.eq.get_mut(k) {
-                            if *e == id {
-                                e.clear();
-                            }
+                        if let Some(e) = self.progress.eq.get_mut(k)
+                            && *e == id {
+                            e.clear();
                         }
                     }
                     Ok(format!("{} süresi doldu", crate::data::item(&id).name))
@@ -1178,10 +1176,9 @@ impl Game {
 
     /// Yere bırak: n = None → yığının tamamı, aksi halde n tane.
     fn drop_slot(&mut self, slot: usize, n: Option<u32>) -> Result<String, String> {
-        if let Some(Some(x)) = self.progress.inv.slots.get(slot) {
-            if crate::data::item_bound(ITEMS[x.item as usize].id) {
-                return Err("Etkinlik ödülleri yere bırakılamaz".into());
-            }
+        if let Some(Some(x)) = self.progress.inv.slots.get(slot)
+            && crate::data::item_bound(ITEMS[x.item as usize].id) {
+            return Err("Etkinlik ödülleri yere bırakılamaz".into());
         }
         let s = self.progress.inv.take_n(slot, n).ok_or("Boş slot")?;
         let (x, y) = (self.player.x, self.player.y + 30.0);
@@ -1296,10 +1293,9 @@ impl Game {
         }
         self.progress.gold -= cost;
         for (s, k, _, _) in &todo {
-            if let Some(i) = s {
-                if let Some(Some(sl)) = self.progress.inv.slots.get_mut(*i) {
-                    sl.dur = crate::inventory::DUR_FULL;
-                }
+            if let Some(i) = s
+                && let Some(Some(sl)) = self.progress.inv.slots.get_mut(*i) {
+                sl.dur = crate::inventory::DUR_FULL;
             }
             if let Some(k) = k {
                 self.progress.eq.set_dur(k, crate::inventory::DUR_FULL);

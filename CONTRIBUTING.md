@@ -5,7 +5,7 @@ Thanks for helping with Zenvex Online. Short version: small focused changes, tes
 ## Setup
 
 - Rust stable (see `rust/rust-toolchain.toml` if present), `cargo-ndk` for Android builds
-- Android SDK 37 (`platforms;android-37.0`), build-tools 36, NDK 27, JDK 21
+- Android SDK 37 (`platforms;android-37.0`), build-tools 37, NDK 30, JDK 25
 - Python 3.11+ for the tools under `tools/`
 
 ## Before you push

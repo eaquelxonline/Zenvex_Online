@@ -210,10 +210,9 @@ impl Game {
         }
         self.progress.gold -= cost;
         self.progress.dog_lv[stat] += 1;
-        if stat == 1 {
-            if let Some(d) = self.dog.as_mut() {
-                d.hp = rpg::dog_hp(self.progress.dog_lv[1]);
-            }
+        if stat == 1
+            && let Some(d) = self.dog.as_mut() {
+            d.hp = rpg::dog_hp(self.progress.dog_lv[1]);
         }
         Ok(format!("Köpek {} seviye {}", rpg::DOG_STATS[stat], lv + 1))
     }

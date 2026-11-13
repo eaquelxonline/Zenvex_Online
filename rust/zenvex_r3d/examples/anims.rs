@@ -93,13 +93,12 @@ fn main() {
                 items.push(Item { model: wm, pos: &wp, nrm: &wn, range: rng, id: 2, glow: out.shown.glow() });
             }
             let (mut mp, mut mn) = (Vec::new(), Vec::new());
-            if let (Some(xf), Some(wm)) = (out.mag, wmodel) {
-                if let Some(pd) = wm.part("mag") {
-                    let piv = zenvex_r3d::math::V3::from(pd.pivot);
-                    let xf2 = zenvex_r3d::math::Xf::new(xf.r, xf.t - xf.r.apply(piv));
-                    transform_model(wm, &xf2, &mut mp, &mut mn);
-                    items.push(Item { model: wm, pos: &mp, nrm: &mn, range: Some((pd.start as usize, pd.count as usize)), id: 3, glow: 0.0 });
-                }
+            if let (Some(xf), Some(wm)) = (out.mag, wmodel)
+                && let Some(pd) = wm.part("mag") {
+                let piv = zenvex_r3d::math::V3::from(pd.pivot);
+                let xf2 = zenvex_r3d::math::Xf::new(xf.r, xf.t - xf.r.apply(piv));
+                transform_model(wm, &xf2, &mut mp, &mut mn);
+                items.push(Item { model: wm, pos: &mp, nrm: &mn, range: Some((pd.start as usize, pd.count as usize)), id: 3, glow: 0.0 });
             }
             let s = Settings { yaw, pitch: 22.0, scale: 95.0, ssaa: 1, outline_px: 1 };
             row.push(render(&items, &s, &light));

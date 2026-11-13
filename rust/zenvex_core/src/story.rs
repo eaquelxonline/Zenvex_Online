@@ -904,10 +904,9 @@ impl Game {
                 // kabul: hedef anında tamamlandıysa (ör. seviye görevi) teslim de sunulur
                 if let Some(w) = which {
                     let (idx, on, n) = self.story_slot(w);
-                    if let Some(q) = chain(w).get(idx) {
-                        if on && self.quest_progress(q, n) >= q.count {
-                            opts.push(("turnin".into(), "Görevi Teslim Et".into()));
-                        }
+                    if let Some(q) = chain(w).get(idx)
+                        && on && self.quest_progress(q, n) >= q.count {
+                        opts.push(("turnin".into(), "Görevi Teslim Et".into()));
                     }
                 }
                 opts.push(("ok".into(), "Yola Çık".into()));

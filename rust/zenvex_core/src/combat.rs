@@ -656,10 +656,9 @@ impl Game {
     fn region_drop(&mut self, z: &Zombie) {
         let zone = self.world.zone(z.x, z.y);
         let pc = if matches!(z.kind, ZKind::Tank | ZKind::Mystery | ZKind::Titan) { 0.6 } else { 0.25 };
-        if self.rng.chance(pc) {
-            if let Some(id) = self.region_pick(zone) {
-                self.spawn_drop_id(id, 1, z.x, z.y);
-            }
+        if self.rng.chance(pc)
+            && let Some(id) = self.region_pick(zone) {
+            self.spawn_drop_id(id, 1, z.x, z.y);
         }
     }
 

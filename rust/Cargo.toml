@@ -4,7 +4,7 @@ members = ["zenvex_core", "zenvex_r3d", "zenvex_jni", "zenvex_server"]
 
 [workspace.package]
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 license = "UNLICENSED"
 
 [profile.release]
