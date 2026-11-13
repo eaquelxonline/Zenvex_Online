@@ -5,7 +5,7 @@ import wave
 import numpy as np
 
 # Bu adlar artık assets/sfx/*.ogg (Kenney, CC0); üretici üzerine yazmasın
-KENNEY = {"click", "coin", "pickup", "chop", "step0", "step1", "crate", "craft", "quest", "car_hit", "hit"}
+KENNEY = {"click", "coin", "pickup", "chop", "step0", "craft", "quest"}
 
 SR = 22050
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -84,64 +84,12 @@ def swing():
     return x * 0.6
 
 
-def hit():
-    d = 0.14
-    body = sweep_sine(140, 45, d) * env(int(SR * d), 0.002, curve=3)
-    click = lowpass(noise(d), 2500) * env(int(SR * d), 0.001, curve=14)
-    return body + 0.7 * click
-
-
 def chop():
     d = 0.18
     tt = t(d)
     x = sum(a * np.sin(2 * np.pi * f * tt) * np.exp(-tt * k) for f, a, k in
             ((520, 1.0, 30), (910, 0.6, 38), (1460, 0.35, 50), (230, 0.6, 22)))
     x += lowpass(noise(d), 3000) * env(len(tt), 0.001, curve=18) * 0.8
-    return x
-
-
-def treefall():
-    d1 = 0.55
-    tt = t(d1)
-    f = 140 + 30 * np.sin(2 * np.pi * 7 * tt) + np.linspace(0, -60, len(tt))
-    creak = 2 * ((np.cumsum(f) / SR) % 1.0) - 1
-    creak = bandpass(creak, 300, 1800) * np.linspace(0.2, 1, len(tt)) * 0.5
-    d2 = 0.7
-    crash = lowpass(noise(d2), np.geomspace(2500, 300, int(SR * d2))) * env(int(SR * d2), 0.004, curve=2.5)
-    thump = sweep_sine(90, 35, d2) * env(int(SR * d2), 0.002, curve=3)
-    return np.concatenate([creak, crash + thump * 0.9])
-
-
-def groan(seed=0, d=0.85):
-    tt = t(d)
-    f0 = 95 + seed * 12
-    f = f0 + 12 * np.sin(2 * np.pi * 4.5 * tt) + np.linspace(10, -20, len(tt))
-    saw = 2 * ((np.cumsum(f) / SR) % 1.0) - 1
-    x = bandpass(saw, 350, 900) + 0.5 * bandpass(saw, 900, 1600)
-    x += 0.15 * bandpass(noise(d), 300, 1500)
-    e = np.sin(np.pi * np.linspace(0, 1, len(tt))) ** 0.7
-    return x * e
-
-
-def zattack():
-    d = 0.3
-    x = groan(2, d) * 0.8 + bandpass(noise(d), 600, 3000) * env(int(SR * d), 0.01, curve=3) * 0.6
-    return x
-
-
-def hurt():
-    d = 0.22
-    x = sweep_sine(320, 140, d, "saw")
-    x = bandpass(x, 250, 1400) * env(int(SR * d), 0.005, curve=2)
-    h = hit()
-    h = np.pad(h, (0, max(0, len(x) - len(h))))[: len(x)]
-    return x + 0.5 * h
-
-
-def zdeath():
-    d = 0.6
-    x = groan(1, d) * np.linspace(1, 0.3, int(SR * d))
-    x += sweep_sine(120, 40, d) * env(int(SR * d), 0.01, curve=2) * 0.7
     return x
 
 
@@ -162,27 +110,12 @@ def click():
     return np.sign(np.sin(2 * np.pi * 880 * tt)) * env(len(tt), 0.001, curve=6) * 0.5
 
 
-def death():
-    d = 1.0
-    x = sweep_sine(300, 60, d, "square")
-    return lowpass(x, 1500) * env(int(SR * d), 0.01, curve=1.5)
-
-
 def main():
     print("ses efektleri...")
     save("swing", swing())
-    save("hit", hit())
     save("chop", chop())
-    save("treefall", treefall())
-    save("groan0", groan(0))
-    save("groan1", groan(1))
-    save("groan2", groan(3))
-    save("zattack", zattack())
-    save("zdeath", zdeath())
-    save("hurt", hurt())
     save("levelup", levelup())
     save("click", click())
-    save("death", death())
 
 
 if __name__ == "__main__":

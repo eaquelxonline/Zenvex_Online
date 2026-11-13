@@ -906,18 +906,6 @@ class UiShotsTest {
         }
     }
 
-    /** Kişisel üste sandık açıkken: solda sandık içeriği. */
-    @Test
-    fun bagChestScreen() {
-        val data = sample("inventory")
-        val chest = sample("chest")
-        paparazzi.snapshot {
-            androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.background(androidx.compose.ui.graphics.Color(0xFF3E5A2A))) {
-                BagView(data, 0, true, {}, { _, _ -> com.zenvex.online.GameSession.Reply(true, "") }, chest = chest) {}
-            }
-        }
-    }
-
     @Test
     fun worldMap() {
         val bmp: android.graphics.Bitmap = android.graphics.BitmapFactory.decodeStream(javaClass.getResourceAsStream("/ui/map.png"))
@@ -1189,8 +1177,6 @@ class UiShotsTest {
             ) { CodeLogo(150.dp) }
         }
     }
-    @Test fun liveSceneLobby() = scene(SceneKind.LOBBY, 7.3f)
-    @Test fun liveSceneLobbyLater() = scene(SceneKind.LOBBY, 41.9f)
     @Test fun liveSceneEmber() = scene(SceneKind.EMBER, 12.1f)
     @Test fun liveSceneIce() = scene(SceneKind.ICE, 20.5f)
     @Test fun liveSceneVault() = scene(SceneKind.VAULT, 5.2f)

@@ -21,7 +21,7 @@ ASSETS = os.path.join(ROOT, "assets")
 
 # karakterler (NPC kareleri ve portreler) ve karakter animasyonları dışarıda tutulur
 SKIP_SPRITE = ("n/", "npc/")
-SKIP_UI = {"commander_portrait"}
+SKIP_UI = set()
 
 
 def safe(name):

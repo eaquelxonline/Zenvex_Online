@@ -504,7 +504,7 @@ object Account {
     fun passClaim(tier: Int, premium: Boolean, done: (Result<JSONObject>) -> Unit) =
         Supa.rpc("zx_pass_claim", sess().put("p_tier", tier).put("p_premium", premium)) { r -> done(obj(r)) }
 
-    /** Sıralama: kategoride ilk 10 (level, kills, pvp, titan, soldiers, bases, dog, crafted, time) */
+    /** Sıralama: kategoride ilk 10 (level, kills, pvp, soldiers, bases, dog, crafted, time) */
     fun board(kind: String, done: (Result<JSONArray>) -> Unit) = Supa.rpc("zx_board", JSONObject().put("p_kind", kind)) { r -> done(arr(r)) }
     /** oyuncunun kendi sırası (ilk 10'da olmasa da): {"rank": 0 = sıralamada yok, "v"} */
     fun boardMe(kind: String, done: (JSONObject) -> Unit) {
@@ -800,8 +800,6 @@ class Atlas private constructor(ctx: Context) {
     // Sayfalar GPU belleğinde (HARDWARE) tutulur: Java yığınını doldurmaz, donanım tuvalinde doğrudan çizilir.
     private val opts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.HARDWARE; inScaled = false }
     private val softOpts = BitmapFactory.Options().apply { inPreferredConfig = Bitmap.Config.ARGB_8888; inScaled = false }
-    /** efekt meta: ad → [kare, fps, döngü(1/0), toplamalı(1/0), piksel(1/0: süzgeçsiz çizilir)] */
-    val fx = HashMap<String, FloatArray>()
     val heroAnims = HashMap<String, IntArray>()   // isim → [kare, fps, döngü]
     val zombieAnims = HashMap<String, IntArray>()
     private val actorAnims = HashMap<String, HashMap<String, IntArray>>()
@@ -826,13 +824,6 @@ class Atlas private constructor(ctx: Context) {
             val x = a.getInt(1); val y = a.getInt(2)
             sprites[k] = Sprite(a.getInt(0), AndroidRect(x, y, x + a.getInt(3), y + a.getInt(4)), a.getDouble(5).toFloat(), a.getDouble(6).toFloat(),
                 if (a.length() > 7) a.getDouble(7).toFloat() else 1f)
-        }
-        manifest.optJSONObject("fx")?.let { f ->
-            for (k in f.keys()) {
-                val m = f.getJSONObject(k)
-                fx[k] = floatArrayOf(m.getInt("frames").toFloat(), m.getDouble("fps").toFloat(), if (m.optBoolean("loop")) 1f else 0f,
-                    if (m.optString("blend") == "add") 1f else 0f, if (m.optBoolean("pixel")) 1f else 0f)
-            }
         }
         val an = manifest.getJSONObject("anims")
         for ((key, map) in listOf("hero" to heroAnims, "zombie" to zombieAnims)) {
@@ -1025,16 +1016,12 @@ object Audio {
      */
     private class Mix(val gain: Float, val prio: Int, val jitter: Float)
     private val MIX = mapOf(
-        "step0" to Mix(0.45f, 0, 0.08f), "step1" to Mix(0.45f, 0, 0.08f),
-        "groan0" to Mix(0.55f, 0, 0.10f), "groan1" to Mix(0.55f, 0, 0.10f), "groan2" to Mix(0.55f, 0, 0.10f),
-        "swing" to Mix(0.6f, 1, 0.08f), "hit" to Mix(0.8f, 1, 0.07f), "chop" to Mix(0.8f, 1, 0.06f), "zattack" to Mix(0.75f, 1, 0.08f),
-        "zdeath" to Mix(0.8f, 1, 0.08f), "pickup" to Mix(0.6f, 1, 0.05f), "coin" to Mix(0.6f, 1, 0.06f), "drone" to Mix(0.5f, 0, 0.0f),
+        "step0" to Mix(0.45f, 0, 0.08f),
+        "swing" to Mix(0.6f, 1, 0.08f), "chop" to Mix(0.8f, 1, 0.06f), "pickup" to Mix(0.6f, 1, 0.05f), "coin" to Mix(0.6f, 1, 0.06f),
         "shot_pistol" to Mix(0.75f, 2, 0.04f), "shot_rifle" to Mix(0.7f, 2, 0.04f), "shot_sniper" to Mix(0.9f, 2, 0.02f),
-        "reload" to Mix(0.75f, 2, 0.0f), "empty" to Mix(0.8f, 2, 0.0f), "hurt" to Mix(0.85f, 2, 0.05f), "car_hit" to Mix(0.8f, 2, 0.05f),
-        "engine" to Mix(0.7f, 1, 0.0f), "crate" to Mix(0.8f, 1, 0.05f), "craft" to Mix(0.8f, 2, 0.0f), "heal" to Mix(0.75f, 2, 0.0f),
-        "shield" to Mix(0.8f, 2, 0.0f), "toxic" to Mix(0.7f, 1, 0.05f), "treefall" to Mix(0.85f, 2, 0.0f), "rocket" to Mix(0.85f, 2, 0.03f),
-        "explosion" to Mix(1.0f, 3, 0.05f), "thunder" to Mix(1.0f, 3, 0.0f), "boss" to Mix(1.0f, 3, 0.0f), "levelup" to Mix(0.9f, 3, 0.0f),
-        "quest" to Mix(0.85f, 3, 0.0f), "rage" to Mix(0.9f, 3, 0.0f), "teleport" to Mix(0.85f, 3, 0.0f), "death" to Mix(1.0f, 3, 0.0f),
+        "engine" to Mix(0.7f, 1, 0.0f), "craft" to Mix(0.8f, 2, 0.0f), "rocket" to Mix(0.85f, 2, 0.03f),
+        "explosion" to Mix(1.0f, 3, 0.05f), "thunder" to Mix(1.0f, 3, 0.0f), "levelup" to Mix(0.9f, 3, 0.0f),
+        "quest" to Mix(0.85f, 3, 0.0f),
         "click" to Mix(0.7f, 3, 0.0f),
     )
     private val DEFAULT_MIX = Mix(0.8f, 1, 0.0f)
@@ -3378,7 +3365,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
 
         // efektler
         if (shakeT > 0) shakeT -= dt
-        updateFx(dt)
         if (bannerT > 0) bannerT -= dt
         if (bannerT <= 0f && bannerQueue.isNotEmpty()) {
             val (t, sub, col) = bannerQueue.removeFirst()
@@ -3404,8 +3390,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         if (pw < particles.size) particles.subList(pw, particles.size).clear()
         flashes.removeAll { it.life -= dt; it.life <= 0 }
         tracers.removeAll { it.life -= dt; it.life <= 0 }
-        chestPollT -= dt
-        if (chestPollT <= 0f) { chestPollT = 0.5f; pollChests() }
         questPollT -= dt
         if (questPollT <= 0f) {
             questPollT = 1f
@@ -3430,7 +3414,7 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
             }
         }
         bombs.removeAll { b -> b.t += dt; b.t >= b.dur }
-        spears.removeAll { s -> s.t += dt; if (s.t >= s.dur) { burst(s.x2, s.y2 + 50, 6, 0xFF9A8A70.toInt(), 120f, 4f); Audio.play("hit", near(s.x2, s.y2) * 0.7f, 0.8f) }; s.t >= s.dur }
+        spears.removeAll { s -> s.t += dt; if (s.t >= s.dur) { burst(s.x2, s.y2 + 50, 6, 0xFF9A8A70.toInt(), 120f, 4f) }; s.t >= s.dur }
         bolts.removeAll { it.life -= dt; it.life <= 0 }
         ghosts.removeAll { it.life -= dt; it.life <= 0 }
         fx3d.enabled = Settings.current.particles
@@ -3527,18 +3511,17 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                     }
                     tracers += Tracer(x1, y1, x2, y2, if (sniper) 0xFFFFE0A0.toInt() else 0xFFFFC870.toInt(), 0.12f, if (sniper) 2.6f else 1.6f)
                     val a = atan2(x2 - x1, y2 - y1)
-                    fx("muzzle", x1, y1, if (sniper) 95f else 62f, Math.toDegrees(-a + PI / 2).toFloat(), dur = 0.06f, frame = (0..2).random())
+                    fx("muzzle", x1, y1, if (sniper) 95f else 62f, Math.toDegrees(-a + PI / 2).toFloat(), dur = 0.06f)
                     flashes += Light(x1, y1, 180f, 0xFFFFC870.toInt(), 0.05f, 0.05f)
                     Audio.play(if (sniper) "shot_sniper" else "shot_rifle", near(x1, y1) * 0.8f, 0.9f + Math.random().toFloat() * 0.2f)
-                    if (!e.optBoolean("hit")) { burst(x2, y2 + 40, 4, 0xFF9A8A70.toInt(), 90f, 3f, 0, 0.5f, 120f); fx(if (atlas.fx["miss"] != null) "miss" else "dust", x2, y2 + 30, 60f) }
+                    if (!e.optBoolean("hit")) { burst(x2, y2 + 40, 4, 0xFF9A8A70.toInt(), 90f, 3f, 0, 0.5f, 120f); fx("dust", x2, y2 + 30, 60f) }
                 }
                 "botdown" -> {
                     burst(x, y - 40, 14, 0xFF7A1A14.toInt(), 180f, 4f); fx("dust", x, y, 120f)
-                    Audio.play("death", near(x, y) * 0.8f, 0.8f)
                     floaters += Floater(x, y - 150, "ASKER DÜŞTÜ", 0xFFFFB070.toInt(), 16f)
                 }
                 "immune" -> floaters += Floater(x, y, "KORUMALI", 0xFFFFE070.toInt(), 16f)
-                "heli" -> { Audio.play("drone", 0.7f, 0.55f); ui.onToast("Helikopter Takviye Getiriyor!") }
+                "heli" -> { ui.onToast("Helikopter Takviye Getiriyor!") }
                 "basecap" -> Bases.capture(e.getInt("id"))
                 "roll" -> {
                     fx("dust", x, y, 120f)
@@ -3569,7 +3552,7 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                     floaters += Floater(x, y, "-" + e.getInt("v"), 0xFFFF5050.toInt(), 24f)
                     vignetteRed = 0.6f
                     val now = android.os.SystemClock.uptimeMillis()
-                    if (now - lastHurtFx > 180) { lastHurtFx = now; shake(7f, 0.18f); vibrate(40, 160); Audio.play("hurt", 0.8f) }
+                    if (now - lastHurtFx > 180) { lastHurtFx = now; shake(7f, 0.18f); vibrate(40, 160) }
                 }
                 "xp" -> floaters += Floater(x, y, "+" + e.getInt("v") + " XP", 0xFF8CE0FF.toInt(), 18f, 1.4f, 1.4f)
                 "gold" -> { floaters += Floater(x, y, "+" + e.getInt("v"), 0xFFFFD34A.toInt(), 20f); Audio.play("coin", 0.7f) }
@@ -3591,7 +3574,7 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                     setBanner("SAVAŞÇI SEVİYE $lv", perk, 0xFFB277FF.toInt())
                 }
                 // PvP: vuruşu hedef oyuncuya ilet (hasarı onun cihazı uygular)
-                "pvp" -> { Online.sendPvp(e.optInt("k"), e.optDouble("v").toFloat(), e.optBoolean("crit")); Audio.play("hit", 1f, 1.1f) }
+                "pvp" -> { Online.sendPvp(e.optInt("k"), e.optDouble("v").toFloat(), e.optBoolean("crit")) }
                 "hit" -> {
                     val kind = e.getInt("kind")
                     // V13: ağaçta odun kıymıkları + balta izi, kayada taş kırıkları ve kıvılcım
@@ -3604,18 +3587,17 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                         else -> if (!hit3d) fx("spark", x, y, 70f, (Math.random() * 4).toInt() * 90f)
                     }
                     if (hit3d) fx3d.impact(x, y - 55f, me3dWeapon, 62.5f, y)
-                    Audio.play(if (kind == 1) "chop" else "hit", near(x, y), 0.9f + Math.random().toFloat() * 0.2f)
+                    if (kind == 1) Audio.play("chop", near(x, y), 0.9f + Math.random().toFloat() * 0.2f)
                     if (!hit3d && kind == 0) burst(x, y + 40, 8, 0xFFB08A50.toInt(), 110f, 4f)
                     shake(2f, 0.08f)
                 }
-                "treefall" -> { Audio.play("treefall", near(x, y)); fx3d.treeFall(x, y, 62.5f) }
+                "treefall" -> { fx3d.treeFall(x, y, 62.5f) }
                 "kill" -> {
                     fx("blood", x, y - 40, 150f)
                     if (Settings.current.particles) { if (pools.size > 30) pools.removeAt(0); pools += Pool(x, y, 95f) }
-                    Audio.play("zdeath", near(x, y), 0.9f + Math.random().toFloat() * 0.2f)
                     burst(x, y, 16, 0xFF6A1410.toInt(), 110f, 5f)  // V19: zombinin boyu kadar yayılır
                 }
-                "died" -> { Audio.play("death"); vibrate(300, 255); shake(10f, 0.4f) }
+                "died" -> { vibrate(300, 255); shake(10f, 0.4f) }
                 "swing" -> {
                     swingT = time
                     // alet (balta, kazma) ağaca/kayaya iner: kesik izi yok, vuruş kıymık/kıvılcımı kendi efektiyle gelir (iz her savuruşta çıkıp vuruştan fazla görünüyordu)
@@ -3649,13 +3631,12 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                         }
                     } else {
                         flashes += Light(x + sin(a) * 50, y + cos(a) * 30 - 70, 220f, 0xFFFFC870.toInt(), 0.06f, 0.06f)
-                        fx("muzzle", x + sin(a) * 58, y + cos(a) * 36 - 78, if (w >= 6) 110f else 75f, Math.toDegrees(-a + PI / 2).toFloat(), dur = 0.07f, frame = (0..2).random())
+                        fx("muzzle", x + sin(a) * 58, y + cos(a) * 36 - 78, if (w >= 6) 110f else 75f, Math.toDegrees(-a + PI / 2).toFloat(), dur = 0.07f)
                         burst(x + sin(a) * 40, y + cos(a) * 25, 2, 0xFFD8B060.toInt(), 120f, 2.5f, 0, 0.8f, 200f)
                     }
                     shake(if (w == 6 || w == 7) 6f else 2.5f, 0.07f)
                 }
-                "reload" -> Audio.play("reload", 0.8f)
-                "noammo" -> { Audio.play("empty", 0.8f); ui.onToast("Mermi yok!") }
+                "noammo" -> { ui.onToast("Mermi yok!") }
                 "explode" -> {
                     val r = e.getDouble("r").toFloat()
                     // V16: tek tarif — ışık · ateş topu/halka/kıvılcım/enkaz · yanık leke ve duman sütunu (eski 4 sprite + 2 parçacık patlaması kalktı)
@@ -3664,13 +3645,12 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                     flashes += Light(x, y - 40, r * 3f, 0xFFFFA040.toInt(), 0.5f, 0.5f)
                     shake(14f * near(x, y) + 3f, 0.4f); vibrate(120, 220)
                 }
-                "groan" -> if (Math.random() < 0.6) Audio.play("groan" + (0..2).random(), near(x, y) * 0.7f, 0.85f + Math.random().toFloat() * 0.3f)
                 "teleport" -> {
                     fx("teleport", x, y - 70, 220f)
-                    Audio.play("teleport", near(x, y)); burst(x, y, 26, 0xFFB070FF.toInt(), 260f, 5f, 1, 0.8f) }
+                    burst(x, y, 26, 0xFFB070FF.toInt(), 260f, 5f, 1, 0.8f) }
                 "toxic" -> {
                     fx("toxic", x, y + 10, 90f, dur = 5f)
-                    Audio.play("toxic", near(x, y)); burst(x, y, 30, 0xFF9AFF40.toInt(), 180f, 9f, 1, 1.4f) }
+                    burst(x, y, 30, 0xFF9AFF40.toInt(), 180f, 9f, 1, 1.4f) }
                 "slam" -> {
                     fx("shockwave", x, y, e.getDouble("r").toFloat() * 2.4f)
                     fx("dust", x, y - 20, e.getDouble("r").toFloat() * 1.6f)
@@ -3678,26 +3658,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                     burst(x, y, 30, 0xFF8A7A60.toInt(), e.getDouble("r").toFloat() * 2f, 6f, 0, 0.8f)
                     shake(10f * near(x, y), 0.3f)
                 }
-                "magma" -> {
-                    // V13 Magma Titan: pençe alev izi, yere vurma lav patlaması, ateş püskürtme konisi
-                    val tx = e.getDouble("tx").toFloat(); val ty = e.getDouble("ty").toFloat()
-                    val ang = Math.toDegrees(kotlin.math.atan2((ty - y).toDouble(), (tx - x).toDouble())).toFloat()
-                    when (e.getInt("a")) {
-                        0 -> { fx("magma_claw", tx, ty - 110f, 240f, ang); Audio.play("swing", near(x, y), 0.6f); shake(4f, 0.15f) }
-                        1 -> {
-                            fx("magma_slam", x, y + 10f, 560f); fx("fire", x, y + 10, 200f, dur = 2.2f)
-                            flashes += Light(x, y - 40, 900f, 0xFFFF7A20.toInt(), 0.6f, 0.6f)
-                            burst(x, y, 40, 0xFFFF8A20.toInt(), 420f, 7f, 1, 0.9f)
-                            Audio.play("explosion", max(0.4f, near(x, y)), 0.7f); shake(16f * near(x, y) + 4f, 0.5f); vibrate(160, 255)
-                        }
-                        else -> {
-                            fx("magma_breath", x + (tx - x) * 0.08f, y - 150f + (ty - y) * 0.08f, 560f, ang)
-                            flashes += Light((x + tx) / 2, (y + ty) / 2 - 60, 700f, 0xFFFF9A30.toInt(), 0.9f, 0.9f)
-                            Audio.play("rocket", near(x, y), 0.5f); shake(6f, 0.6f)
-                        }
-                    }
-                }
-                "boss" -> { setBanner(e.getString("name"), "Bir boss uyandı!", 0xFFFF4A3A.toInt()); Audio.play("boss"); shake(8f, 0.6f) }
                 "quest" -> {
                     // başlık olayın türüne göre: yeni görev, teslim, konuşmaya git ya da biten görev
                     val title = e.getString("title")
@@ -3742,22 +3702,21 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                     Audio.play("thunder", near(x, y).coerceAtLeast(0.5f))
                 }
                 "doghit" -> floaters += Floater(x, y - 70, "-" + e.getInt("v"), 0xFFFFA060.toInt(), 18f)
-                "drone" -> Audio.play("drone", near(x, y) * 0.5f, 1.3f)
-                "shield" -> { Audio.play("shield"); floaters += Floater(hud[Native.PX], hud[Native.PY] - 140, "+" + e.getInt("v") + " KALKAN", 0xFF70C8FF.toInt(), 20f) }
-                "heal" -> { Audio.play("heal", 0.6f); floaters += Floater(x, y - 140, "+" + e.getInt("v"), 0xFF60FF80.toInt(), 22f); burst(x, y, 10, 0xFF70FF90.toInt(), 80f, 5f, 1, 1f) }
+                "shield" -> { floaters += Floater(hud[Native.PX], hud[Native.PY] - 140, "+" + e.getInt("v") + " KALKAN", 0xFF70C8FF.toInt(), 20f) }
+                "heal" -> { floaters += Floater(x, y - 140, "+" + e.getInt("v"), 0xFF60FF80.toInt(), 22f); burst(x, y, 10, 0xFF70FF90.toInt(), 80f, 5f, 1, 1f) }
                 "rage" -> {
                     fx("rage", 0f, 0f, 220f, follow = true, dur = 5f)
-                    Audio.play("rage"); setBanner("ÖFKE", "Hasar arttı!", 0xFFFF5A3A.toInt()) }
+                    setBanner("ÖFKE", "Hasar arttı!", 0xFFFF5A3A.toInt()) }
                 "cloak" -> {
                     fx("levelup", 0f, 0f, 110f, follow = true)
-                    Audio.play("shield", 1f, 0.7f); setBanner("TANRI PELERİNİ", "3 sn ölümsüzlük", 0xFFFFD34A.toInt()) }
+                    setBanner("TANRI PELERİNİ", "3 sn ölümsüzlük", 0xFFFFD34A.toInt()) }
                 "lastbreath" -> setBanner("SON NEFES", "Ölümden döndün!", 0xFFFF8080.toInt())
-                "crate" -> { Audio.play("crate", near(x, y)); burst(x, y, 18, 0xFFB08A50.toInt(), 260f, 5f) }
-                "car_hit" -> { Audio.play("car_hit", near(x, y)); shake(5f, 0.15f); vibrate(40, 150) }
+                "crate" -> { burst(x, y, 18, 0xFFB08A50.toInt(), 260f, 5f) }
+                "car_hit" -> { shake(5f, 0.15f); vibrate(40, 150) }
                 "enter" -> { Audio.play("engine", 0.8f); fx("dust", hud[Native.PX], hud[Native.PY] - 10, 150f) }
                 "exit" -> { Audio.play("click", 0.6f); fx("dust", hud[Native.PX], hud[Native.PY] - 10, 130f) }
                 "msg" -> ui.onToast(e.getString("text"))
-                "step" -> if (Math.random() < 0.5) Audio.play("step" + (0..1).random(), 0.25f, 0.9f + Math.random().toFloat() * 0.2f)
+                "step" -> if (Math.random() < 0.5) Audio.play("step0", 0.25f, 0.9f + Math.random().toFloat() * 0.2f)
             }
         }
     }
@@ -3808,7 +3767,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         drawGround(c)
         drawTracks(c, dt)
         drawPools(c, dt)
-        drawChests(c)
         drawParticles(c, under = true)
         fx3d.drawGround(c, camX, camY, scale, sw.toFloat(), sh.toFloat())
         // V19: sınır bulutu varlıkların altında: sınıra dayanan oyuncu ve zombiler bulutun içinde kaybolmaz (kenara 6
@@ -3836,7 +3794,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                 D_FLAG -> drawFlag(c, o)
             }
         }
-        drawFx(c)
         drawParticles(c)
         fx3d.draw(c, camX, camY, scale, sw.toFloat(), sh.toFloat())
         drawTracers(c)
@@ -4219,7 +4176,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                     plates += Plate(sx, top - 4 * density, localName, 0xFFFFFFFF.toInt(), -1f, false, localClan.ifEmpty { null }, CLAN_COLOR,
                         t?.optString("name")?.ifEmpty { null }, t?.optInt("rank") ?: 0, self = true)
                 }
-                if (hud[Native.SHIELD] > 0) drawFxSprite(c, "shield", x, y - 62, 175f, time)
                 if (Settings.current.particles && hud[Native.POISON] > 0 && Math.random() < 0.2)
                     particles += Particle(x, y, 60f, 0f, 0f, 40f, 0.8f, 0.8f, 0xFF9AFF40.toInt(), 4f, 3)
             }
@@ -4452,50 +4408,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
     private val questMarks = HashMap<Int, String>()
     private var questPollT = 0f
 
-    // ---- kişisel üs sandıkları (çanta işçisi): Rust "chests" görünümünden yarım saniyede bir
-    private class ChestMark(val x: Float, val y: Float, val id: String, val used: Int, val cap: Int)
-    private val chestMarks = ArrayList<ChestMark>()
-    private var chestPollT = 0f
-    @Volatile private var nearChest = -1
-
-    private fun pollChests() {
-        val j = GameSession.ui("chests")
-        val l = j.optJSONArray("list")
-        val out = ArrayList<ChestMark>()
-        for (i in 0 until (l?.length() ?: 0)) {
-            val o = l!!.getJSONObject(i)
-            out += ChestMark(o.getDouble("x").toFloat(), o.getDouble("y").toFloat(), o.optString("id"), o.optInt("used"), o.optInt("cap"))
-        }
-        synchronized(chestMarks) { chestMarks.clear(); chestMarks.addAll(out) }
-        nearChest = j.optInt("near", -1)
-    }
-
-    /** Sandıklar: sandık görseli (ahşap / askerî), yakındaysa doluluk plakası. */
-    private fun drawChests(c: AndroidCanvas) {
-        synchronized(chestMarks) {
-            for ((i, m) in chestMarks.withIndex()) {
-                val sx = wx(m.x); val sy = wy(m.y)
-                if (sx < -200 || sy < -200 || sx > sw + 200 || sy > sh + 300) continue
-                // V20: üsteki sandık üretim ekranındaki görseliyle (ahşap / demir / askerî) aynı; büyütülür, piksel keskin.
-                // Yanındayken hafifçe zıplar ve altında altın ışık (dünyadaki ganimet sandıklarından ayrı görünür)
-                val icon = atlas["i/" + m.id]
-                val sp = icon ?: atlas[when (m.id) { "chest_wood" -> "s/chest_wood"; "chest_iron" -> "s/chest_iron"; else -> "s/chest_mil" }]
-                if (sp != null) {
-                    val k = if (icon == null) 1f else when (m.id) { "chest_wood" -> 1.7f; "chest_iron" -> 1.85f; else -> 2f }
-                    val near = i == nearChest
-                    val lift = if (near) (2f + 2f * sin(time * 6f)) * scale else 0f
-                    if (near) {
-                        fill.color = 0x55FFD34A
-                        rect.set(sx - 40 * scale, sy - 9 * scale, sx + 40 * scale, sy + 9 * scale)
-                        c.drawOval(rect, fill)
-                    }
-                    castShadow(c, sx, sy, 56 * scale) { p -> atlas.draw(c, sp, sx, sy, scale * k, p) }
-                    atlas.draw(c, sp, sx, sy - lift, scale * k, pixelPaint)
-                }
-                if (i == nearChest) drawText(c, "Sandık ${m.used}/${m.cap}", sx - 34 * density, sy - 70 * scale, 12 * density, 0xFFFFD34A.toInt())
-            }
-        }
-    }
     /** dokunarak menü açmak için uzak oyuncuların ekran kutuları */
     private class PlayerBox(val l: Float, val t: Float, val r: Float, val b: Float, val uid: String, val name: String)
     private val playerBoxes = ArrayList<PlayerBox>()
@@ -4520,7 +4432,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         // büyücü görseli yoksa görevci görseli mor tonla
         val key = when {
             name == "wizard" && atlas["npc/wizard"] == null -> "npc/quest"
-            name == "commander" && atlas["npc/commander"] == null -> "npc/soldier"
             else -> "npc/$name"
         }
         // V13 Gezgin Tüccar Marco: 5 yönlü bekleme animasyonu (batı yanı doğunun aynası)
@@ -4620,11 +4531,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
     @Volatile private var baseNear: JSONObject? = null
     private var baseNearT = 0f
 
-    /** V10 asker karelerinde namlu ucu (sağa bakan görselde genişlik/yükseklik oranı) */
-    private val soldierTip = mapOf(
-        "npc/soldier_aim_s" to (0.99f to 0.2f), "npc/soldier_fire" to (0.8f to 0.23f), "npc/soldier_crouch" to (0.99f to 0.27f),
-        "npc/sniper_aim_s" to (0.99f to 0.26f), "npc/sniper_kneel" to (0.99f to 0.24f), "npc/sniper_recoil" to (0.8f to 0.27f))
-
     /**
      * Devlet üssü askeri: asker görseli ızgarayla nefes alır, yürürken sallanır, ateşte geri teper; elde çizimle tüfek
      * (keskin nişancıda dürbünlü uzun namlu) nişan açısına döner. Keskin nişancı nişan alırken kırmızı lazer çizer.
@@ -4643,96 +4549,7 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         val dirX0 = cos(face); val dirY0 = sin(face)
         if ((kind == 2 || kind == 3) && drawBot(c, kind, x, y, sx, sy, face, state, t, fxf, hp, lv, hostile, extra)) return
         if ((kind == 0 || kind == 1) && drawSoldier3D(c, sniper, tower, x, y, sx, sy, face, state, t, fxf, hp, lv, hostile, aimD, extra)) return
-        val who = if (sniper) "sniper" else "soldier"
-        // V10 yan görünüm pozları (sağa bakar): devriye, nişan, ateş, kulede çömelme, şarjör, dürbün, vurulma, düşüş, ölü.
-        // Yukarı bakarken V8 sırt, kameraya doğru nişanda V8 ön karesi.
-        val key = when {
-            state == 4 -> when {
-                extra < 0.2f -> "npc/${who}_hit"
-                !sniper && extra < 0.5f -> "npc/soldier_falling"
-                else -> "npc/${who}_dead"
-            }
-            fxf == 1 && state != 3 -> "npc/${who}_hit"
-            dirY0 < -0.55f && state != 0 -> "npc/${who}_back"
-            dirY0 > 0.75f && state >= 2 -> "npc/${who}_aim"
-            state == 3 -> if (sniper) "npc/sniper_recoil" else if (tower) "npc/soldier_crouch" else "npc/soldier_fire"
-            state == 2 -> if (sniper) (if (tower) "npc/sniper_kneel" else "npc/sniper_aim_s") else if (tower) "npc/soldier_crouch" else "npc/soldier_aim_s"
-            state == 1 -> if (sniper) "npc/sniper_idle" else if ((t * 4f).toInt() % 2 == 0) "npc/soldier_walk1" else "npc/soldier_walk2"
-            sniper -> if ((t / 5f).toInt() % 3 == 2) "npc/sniper_bolt" else "npc/sniper_scan"
-            else -> if ((t / 6f).toInt() % 4 == 3) "npc/soldier_reload" else "npc/soldier_walk1"
-        }.let { if (atlas[it] != null) it else if (atlas["npc/${who}_idle"] != null) "npc/${who}_idle" else "npc/soldier" }
-        val v8 = key != "npc/soldier"
-        val tip = soldierTip[key]
-        val sp = atlas[key] ?: run { placeholder(c, sx, sy, if (hostile) 0xFF8A3A2A.toInt() else 0xFF3A6AAA.toInt()); return }
-        val bmp = npc6Bmp.getOrPut(key) { atlas.extract(key) } ?: return
-        val k = sp.k * scale
-        val w = sp.w * k; val h = sp.h * k
-        val dirX = cos(face); val dirY = sin(face)
-        // nişan karesi sağa bakar; arka karede tüfek sola dönük
-        val flip = if (key.endsWith("_back")) dirX > 0f else dirX < 0f
-        val dead = state == 4
-        c.save()
-        var ox = 0f; var oy = 0f
-        if (state == 3) ox -= dirX * 5f * scale
-        if (state == 1) oy -= kotlin.math.abs(sin(t * 9f)) * 4f * scale
-        if (dead) {
-            val f = (extra / 0.45f).coerceIn(0f, 1f)
-            if (key.endsWith("_idle") || key == "npc/soldier") c.rotate((if (flip) 1f else -1f) * 84f * f, sx, sy)
-            deadPaint.alpha = (255 * (1f - ((extra - 3f) / 3f).coerceIn(0f, 1f))).toInt()
-        }
-        val left = sx + ox - sp.ax * k; val top = sy + oy - sp.ay * k
-        val breath = sin(t * 2.3f + x * 0.01f)
-        var i = 0
-        for (j in 0..meshH) {
-            val v = j.toFloat() / meshH
-            val up = ((0.62f - v) / 0.62f).coerceIn(0f, 1f)
-            for (q in 0..meshW) {
-                val u = q.toFloat() / meshW
-                var vx = left + u * w + (u - 0.5f) * w * 0.012f * breath * up
-                val vy = top + v * h - h * 0.005f * (breath + 1f) * up
-                if (flip) vx = 2 * (sx + ox) - vx
-                meshVerts[i++] = vx; meshVerts[i++] = vy
-            }
-        }
-        val paint = when { dead -> deadPaint; fxf == 1 -> flashPaint; !hostile -> friendPaint; else -> pixelPaint }
-        if (!dead) castShadow(c, sx + ox, sy + oy, w * 0.55f) { p -> c.drawBitmapMesh(bmp, meshW, meshH, meshVerts, 0, null, 0, p) }
-        c.drawBitmapMesh(bmp, meshW, meshH, meshVerts, 0, null, 0, paint)
-        // tüfek: omuzdan nişan yönüne (V8 karelerde tüfek çizimin içinde; yalnız namlu ucu hesaplanır)
-        if (!dead) {
-            val shx = sx + ox + (if (flip) -1f else 1f) * w * 0.08f
-            val shy = top + h * 0.45f
-            val len = (if (sniper) 66f else 46f) * scale
-            // V10 karelerde namlu ucu görselden (sağa bakan karede oran); aynalanınca simetriği
-            val ex = if (tip != null) { val tx = left + tip.first * w; if (flip) 2 * (sx + ox) - tx else tx } else shx + dirX * len
-            val ey = if (tip != null) top + tip.second * h else shy + dirY * len * 0.55f
-            if (!v8) {
-            stroke.strokeCap = Paint.Cap.ROUND
-            stroke.color = 0xFF15140F.toInt(); stroke.strokeWidth = 6.5f * scale; c.drawLine(shx, shy, ex, ey, stroke)
-            stroke.color = if (sniper) 0xFF5A5040.toInt() else 0xFF3A3C3E.toInt(); stroke.strokeWidth = 3.5f * scale; c.drawLine(shx, shy, ex, ey, stroke)
-            if (sniper) {
-                val mx = shx + dirX * len * 0.45f; val my = shy + dirY * len * 0.25f
-                fill.color = 0xFF101010.toInt(); c.drawRect(mx - 6 * scale, my - 6 * scale, mx + 6 * scale, my - 1 * scale, fill)
-            }
-            stroke.strokeCap = Paint.Cap.BUTT
-            }
-            if (state == 3 && key != "npc/soldier_fire") {
-                fill.color = 0xFFFFE08A.toInt(); c.drawCircle(ex + dirX * 6 * scale, ey + dirY * 3 * scale, 6f * scale, fill)
-                fill.color = 0x80FFB040.toInt(); c.drawCircle(ex + dirX * 6 * scale, ey + dirY * 3 * scale, 12f * scale, fill)
-            }
-            // keskin nişancı lazeri: nişan doldukça kalınlaşır, uçta yanıp sönen nokta
-            if (sniper && state == 2 && aimD > 0f) {
-                val lx = ex + dirX * aimD * scale; val ly = ey + dirY * aimD * scale
-                stroke.color = alphaC(0xFFFF2020.toInt(), 0.35f + 0.5f * extra); stroke.strokeWidth = (1f + 2f * extra) * density
-                c.drawLine(ex, ey, lx, ly, stroke)
-                fill.color = alphaC(0xFFFF3030.toInt(), 0.6f + 0.4f * sin(time * 25f)); c.drawCircle(lx, ly, (3f + 4f * extra) * density, fill)
-            }
-        }
-        c.restore()
-        if (!dead) {
-            if (fxf == 2) drawFxSprite(c, "shield", x, y - 62 - (if (tower) 235f else 0f), 175f, time)
-            val label = "Sv $lv " + if (sniper) "Keskin Nişancı" else "M4 Askeri"
-            plates += Plate(sx, top - 4 * density, label, if (hostile) 0xFFFF7A6A.toInt() else 0xFF8AD8FF.toInt(), hp, false, null)
-        }
+        // 3B model henüz hazır değilse asker bu karede çizilmez
     }
 
     /**
@@ -4780,7 +4597,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                 c.drawLine(ex, ey, lx, ly, stroke)
                 fill.color = alphaC(0xFFFF3030.toInt(), 0.6f + 0.4f * sin(time * 25f)); c.drawCircle(lx, ly, (3f + 4f * extra) * density, fill)
             }
-            if (fxf == 2) drawFxSprite(c, "shield", x, y - 62 - (if (tower) 235f else 0f), 175f, time)
             val label = "Sv $lv " + if (sniper) "Keskin Nişancı" else "M4 Askeri"
             plates += Plate(sx, top - 4 * density, label, if (hostile) 0xFFFF7A6A.toInt() else 0xFF8AD8FF.toInt(), hp, false, null)
         }
@@ -4812,7 +4628,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         }
         atlas.draw(c, sp, sx, sy, scale, paint, flip)
         if (!dead) {
-            if (fxf == 2) drawFxSprite(c, "shield", x, y - 62, 175f, time)
             val top = sy - sp.ay * sp.k * scale
             val label = "Sv $lv " + if (kind == 2) "Kalkanlı Asker" else "Alev Makineli Asker"
             plates += Plate(sx, top - 4 * density, label, if (hostile) 0xFFFF7A6A.toInt() else 0xFF8AD8FF.toInt(), hp, false, null)
@@ -4834,14 +4649,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         val sh2 = (1f - alt / 700f).coerceIn(0.35f, 1f)
         groundBlob(c, gx, gy, 90 * s * sh2, 26 * s * sh2, 0.35f * sh2)
         val hy = gy - alt * s
-        val body = atlas["x/heli"]
-        if (body != null) {
-            // V8 gövde görseli (burnu sola); sağa giderken aynalanır, hafif yatış
-            val right = cos(ang) > 0f
-            c.save(); c.rotate((if (right) 1f else -1f) * 4f * sin(t * 1.3f), gx, hy)
-            atlas.draw(c, body, gx, hy, s, pixelPaint, right)
-            c.restore()
-        } else {
         c.save(); c.translate(gx, hy); c.rotate(Math.toDegrees(ang.toDouble()).toFloat())
         val r = RectF()
         fill.color = 0xFF1A1C14.toInt(); r.set(-142 * s, -9 * s, -50 * s, 9 * s); c.drawRoundRect(r, 6 * s, 6 * s, fill)
@@ -4859,7 +4666,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         stroke.color = 0xA0202020.toInt(); stroke.strokeWidth = 3 * s
         c.drawLine(-140 * s + cos(ta) * 14 * s, sin(ta) * 14 * s + 0f, -140 * s - cos(ta) * 14 * s, -sin(ta) * 14 * s, stroke)
         c.restore()
-        }
         // ana pervane: bulanık disk + dört kanat
         fill.color = 0x22000000; c.drawCircle(gx, hy - 4 * s, 120 * s, fill)
         stroke.color = 0xB0181818.toInt(); stroke.strokeWidth = 5 * s
@@ -4897,13 +4703,11 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         stroke.pathEffect = android.graphics.DashPathEffect(floatArrayOf(10 * density, 8 * density), time * 20f)
         c.drawCircle(sx, sy, rr, stroke)
         stroke.pathEffect = null
-        if (cap > 0f && atlas.fx["capture"] == null) {
+        if (cap > 0f) {
             stroke.color = 0xFFFFD34A.toInt(); stroke.strokeWidth = 6 * density
             c.drawArc(sx - rr, sy - rr, sx + rr, sy + rr, -90f, 360f * cap.coerceIn(0f, 1f), false, stroke)
         }
         c.restore()
-        // V8 ele geçirme halkası: ilerlemeye göre dolan altın halka kareleri
-        if (cap > 0f) drawFxSprite(c, "capture", x, y, rr * 2.1f / scale, 0f, fixedFrame = (cap.coerceIn(0f, 1f) * 5.99f).toInt())
         val poleH = 170f * s
         stroke.color = 0xFF2A2622.toInt(); stroke.strokeWidth = 5 * s; c.drawLine(sx, sy, sx, sy - poleH, stroke)
         stroke.color = 0xFF9A948A.toInt(); stroke.strokeWidth = 2.5f * s; c.drawLine(sx, sy, sx, sy - poleH, stroke)
@@ -5044,7 +4848,7 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         if (anim == "walk") { anim = gait.first; f = gait.second }
         val vd = viewDir(pre, anim, dir, f)
         val flip = viewFlip
-        val sp = atlas[spriteKey(pre, anim, vd, f)] ?: atlas[spriteKey(pre, "idle", 0, 0)] ?: atlas[spriteKey("z/dog", "idle", 0, 0)]
+        val sp = atlas[spriteKey(pre, anim, vd, f)] ?: atlas[spriteKey(pre, "idle", 0, 0)]
         if (sp == null) { placeholder(c, sx, sy, 0xFFC08A40.toInt()); return }
         val paint = if (drawBuf[o + 7] > 0) flashPaint else pixelPaint
         atlas.draw(c, sp, sx, sy, scale, paint, flip)
@@ -5052,8 +4856,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
     }
 
     private val zombiePixel = HashMap<String, Boolean>()
-
-    private val magmaArt by lazy { atlas.has("z/magma/idle_0_0") }
 
     private fun drawZombie(c: AndroidCanvas, o: Int) {
         val code = drawBuf[o + 1].toInt()
@@ -5072,9 +4874,9 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         val maxHp = special shr 2
         val sx = wx(x); val sy = wy(y)
         if (sx < -400 || sx > sw + 400 || sy < -200 || sy > sh + 700) return
-        // V13: Titan'ın Magma İskelet görseli (yürüme 8 yön, diğerleri 5 yön + ayna)
-        val sid = if (species > 0) speciesId.getOrNull(species - 1) else if (kind == 7 && magmaArt) "magma" else null
-        val name = sid ?: zombieSprite.getOrElse(kind) { "walker" }
+        // bölge türü görseli; klasik görünüş yalnız karanlık ve tank zombide kaldı
+        val sid = if (species > 0) speciesId.getOrNull(species - 1) else null
+        val name = sid ?: zombieSprite.getOrElse(kind) { "dark" }
         val zp = zPrefix(name)
         crowdNow++
         val f = frameOf(atlas.anims(zp, atlas.zombieAnims), anim, t)
@@ -5091,7 +4893,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         }
         var sp = spriteAt(zp, anim, zdir, f)
         if (sp == null) sp = spriteAt(zp, "idle", zdir, 0)
-        if (sp == null) sp = spriteAt(zPrefix("walker"), anim, dir, f)
         if (sp == null) { placeholder(c, sx, sy, zombieColor.getOrElse(kind) { -1 }); return }
         if (alpha > 0.3f && anim != "death") {
             // aşırı kalabalıkta (yüzlerce yaratık) eğik siluet gölgesi yerine yer lekesi: görüntü aynı kalır, çizim yarıya iner
@@ -5236,13 +5037,12 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         // V8: yandan çizilmiş motor ve açık cip (yön: sağa/sola çevrilir, dikey giderken son yön korunur)
         // V11: 8 yönlü çizim varsa (x8/moto/0..7, x8/car/0..7; docs/15 istemleri) araç gittiği yöne döner, yan görünüş kullanılmaz
         // V12.2: gezgin tüccarın kamyoneti (suv) için ayrı 8 yön (x8/truck, docs/19) varsa o
-        var fxDir = dir
+        val fxDir = dir
         // 3B araç (motosiklet: Nightstalker + sürücü, araba: Hellhound); kare yoksa çizim
         val d3 = (kind == 1 || kind == 2) && drawVehicle3D(c, kind, "v" + drawBuf[o + 10].toInt(), x, y, sx, sy, drawBuf[o + 5], speed, driver, hp, wreck, dir)
         if (!d3) {
             val d8 = (if (kind == 3) atlas["x8/truck/$dir"] else null) ?: if (kind >= 1) atlas["x8/${if (kind == 1) "moto" else "car"}/$dir"] else null
-            val v8 = if (d8 != null) null else if (kind == 1) atlas["x/moto"] else if (kind >= 2) atlas["x/car"] else null
-            val sp = d8 ?: v8 ?: atlas["v/$id/$dir"] ?: atlas["s/wreck0"]
+            val sp = d8 ?: atlas["v/$id/$dir"]
             if (sp == null) { placeholder(c, sx, sy, 0xFFB03030.toInt()); return }
             // kendi aracın: Elmas Sandığı araç kaplaması
             val mine = driver >= 0 && hypot(x - hud[Native.PX], y - hud[Native.PY]) < 8f && Skins.vehicle.isNotEmpty()
@@ -5254,25 +5054,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                     20f, 0.6f, 0.6f, tc, 3f, 3)
             }
             val vib = if (speed > 5 && !wreck) sin(time * 50f) * 0.6f * density else 0f
-            // efektlerin (egzoz, toz, iz, far) yönü: yan görünüşlü araçta görselin baktığı yan (doğu/batı)
-            if (v8 != null) {
-                // motorun resmi sağa, cipin resmi sola bakar
-                val right = when (dir) { in 1..3 -> true; in 5..7 -> false; else -> vehFace[driver] ?: (dir == 0) }
-                fxDir = if (right) 2 else 6
-                if (driver >= 0) vehFace[driver] = right
-                val flip = if (kind == 1) !right else right
-                val sgn = if (right) 1f else -1f
-                val shw = sp.w * sp.k * scale * 0.46f
-                groundBlob(c, sx, sy - scale, shw, 8 * scale, 0.3f)
-                // hafif öne eğilme (hızlanırken) ve yol sarsıntısı
-                val tilt = if (wreck) 0f else (speed / 600f).coerceIn(0f, 1f) * 1.5f * sgn
-                c.save(); if (tilt != 0f) c.rotate(tilt, sx, sy)
-                atlas.draw(c, sp, sx, sy + vib, scale, paint, flip)
-                if (driver >= 0) drawSeated(c, driver, kind, right, sx, sy + vib)
-                c.restore()
-                if (hp < 0.999f && !wreck) bar(c, sx, sy - sp.ay * sp.k * scale - 6 * density, 56 * density, hp, 0xFF60D0FF.toInt())
-                if (driver >= 0 && speed > 20 && !wreck) surfaceFx(x, y, fxDir, speed, kind)
-            } else {
                 // binicili iki tekerlekliler: kahraman eyerde oturur, hızla pedal çevirir; önden/arkadan bakışta araç önde
                 val rider = driver >= 0 && kind <= 1
                 val riderFront = rider && (dir == 0 || dir == 4)
@@ -5281,7 +5062,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                 if (riderFront) atlas.draw(c, sp, sx, sy + vib, scale, paint)
                 if (hp < 0.999f && !wreck) bar(c, sx, sy - sp.ay * sp.k * scale - 6 * density, 56 * density, hp, 0xFF60D0FF.toInt())
                 if (driver >= 0 && speed > 20 && !wreck) surfaceFx(x, y, dir, speed, kind)
-            }
         }
         // Araç arkası: tek efekt kaynağı. Tekerlek tozu + iz = surfaceFx (gövde + iz); egzoz yalnız ivmelenirken (ayrı iş);
         // far ışığı ayrı katman. Eski `road_*`, `dust` ve `exhaust` sprite'ları aynı işi ikinci kez yapıyordu (docs/22 §3.2).
@@ -5595,7 +5375,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
             val p = it.next()
             p.t += dt
             if (p.t > 12f) { it.remove(); continue }
-            drawFxSprite(c, "blood_pool", p.x, p.y, p.size, p.t, alpha = (255 * ((12f - p.t) / 3f).coerceIn(0f, 1f) * 0.85f).toInt())
         }
     }
 
@@ -5641,35 +5420,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         atlas.draw(c, hs, ax, ay, scale, pixelPaint, flip)
     }
 
-    /** sürücü başına son bakış yönü (dikey giderken araç ters dönmesin) */
-    private val vehFace = HashMap<Int, Boolean>()
-
-    /**
-     * V8 motor/cip sürücüsü: kalça noktası eyere oturur. Cipte gövde kapısının altı kırpılır (yalnız gövde ve baş görünür).
-     * Ölçüler araç resminin kaynak pikselinde (çapaya göre), x resmin baktığı yönde.
-     */
-    private fun drawSeated(c: AndroidCanvas, driver: Int, kind: Int, right: Boolean, sx: Float, sy: Float) {
-        val actor = "h/" + heroIds.getOrElse(driver) { "kaan" }
-        val hs = atlas[spriteKey(actor, "ride", 0, 0)] ?: return
-        val car = kind >= 2
-        val vs = (if (car) atlas["x/car"] else atlas["x/moto"]) ?: return
-        // eyer (kaynak px, çapaya göre): motor resmi sağa → arka (sol) tarafta; cip resmi sola → ön koltuk
-        val seatX = if (car) 110f else 64f; val seatY = if (car) 52f else 37f
-        val dx = (seatX - vs.ax) * vs.k * (if (car) -1f else 1f)  // resmin "ileri" eksenine göre
-        val hx = sx + dx * (if (right) 1f else -1f) * scale
-        val hy = sy + (seatY - vs.ay) * vs.k * scale
-        // binici resmi sola bakar; kalça kaynakta (47, 115) civarı
-        val hipX = (47f - hs.ax) * hs.k; val hipY = (115f - hs.ay) * hs.k
-        val flip = right
-        val ax = hx - hipX * scale * (if (flip) -1f else 1f)
-        val ay = hy - hipY * scale
-        if (car) {
-            c.save(); c.clipRect(0f, 0f, sw.toFloat(), sy + (60f - vs.ay) * vs.k * scale)
-            atlas.draw(c, hs, ax, ay, scale, pixelPaint, flip)
-            c.restore()
-        } else atlas.draw(c, hs, ax, ay, scale, pixelPaint, flip)
-    }
-
     private fun drawDrone(c: AndroidCanvas, o: Int) {
         val x = drawBuf[o + 2]; val y = drawBuf[o + 3]
         val t = drawBuf[o + 6]
@@ -5707,7 +5457,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                 if (Settings.current.particles && Math.random() < 0.15) particles += Particle(x + (Math.random().toFloat() - 0.5f) * r / scale, y + (Math.random().toFloat() - 0.5f) * r / scale * 0.5f, 0f, 0f, 0f, 30f, 0.8f, 0.8f, 0xFFB0FF60.toInt(), 3f, 3)
             }
             1 -> { // zehir bulutu
-                drawFxSprite(c, "toxic", x, y + 10, drawBuf[o + 7] * 0.9f, age, alpha = (200 * fade).toInt())
                 for (k in 0..4) {
                     val a = age * 0.6f + k * 1.3f
                     val cx = sx + cos(a) * r * 0.35f; val cy = sy - 40 * scale + sin(a * 1.3f) * r * 0.2f
@@ -5717,7 +5466,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                 fill.shader = null
             }
             2 -> { // şifa alanı
-                drawFxSprite(c, "heal", x, y + 8, drawBuf[o + 7] * 0.7f, age, alpha = (230 * fade).toInt())
                 stroke.color = alphaC(0xFF60FF90.toInt(), 0.8f * fade); stroke.strokeWidth = 3 * density
                 c.save(); c.scale(1f, 0.55f, sx, sy)
                 c.drawCircle(sx, sy, r, stroke)
@@ -5794,13 +5542,7 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
     private fun pdf(color: Int, mode: PorterDuff.Mode): android.graphics.ColorFilter =
         filterCache.getOrPut((color.toLong() shl 8) or mode.ordinal.toLong()) { PorterDuffColorFilter(color, mode) }
 
-    // ------------------------------------------------------------------ sprite efektleri
-    private class Fx(val name: String, var x: Float, var y: Float, val size: Float, val rot: Float, val follow: Boolean, val dur: Float, val frame: Int) {
-        var t = 0f
-    }
-    private val fxs = ArrayList<Fx>()
-    private val addPaint = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.ADD) }
-    private val addPixPaint = Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.ADD) }
+    // ------------------------------------------------------------------ efektler (kodla: parçacık, hilal/halka dalgaları, ateş topu)
     private val fxPixPaint = Paint()
 
     /** Testler: efekti oyuncunun yanında tetikler */
@@ -5814,78 +5556,13 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         }
     }
 
-    private fun fx(name: String, x: Float, y: Float, size: Float, rot: Float = 0f, follow: Boolean = false, dur: Float = -1f, frame: Int = -1) {
-        // V16: efektler kodla (dokulu parçacık, hilal/halka dalgaları, ateş topu); atlas efekt sprite'ları yalnız bilinmeyen adlar için
+    private fun fx(name: String, x: Float, y: Float, size: Float, rot: Float = 0f, follow: Boolean = false, dur: Float = -1f) {
+        // efektler kodla üretilir (dokulu parçacık, hilal/halka dalgaları, ateş topu)
         val st = Settings.current
         if (!st.particles && name !in setOf("levelup", "teleport", "bolt")) return
         val ex = if (follow) hud[Native.PX] else x
         val ey = if (follow) hud[Native.PY] - (if (name == "levelup") 0f else 30f) else y
-        if (fx3d.named(name, ex, ey, size, rot, dur, follow)) return
-        if (!Settings.current.particles && name in setOf("dust", "exhaust", "blood", "spark")) return
-        if (fxs.size > 120) fxs.removeAt(0)
-        fxs += Fx(name, x, y, size, rot, follow, dur, frame)
-    }
-
-    private fun updateFx(dt: Float) {
-        val it = fxs.iterator()
-        while (it.hasNext()) {
-            val f = it.next()
-            f.t += dt
-            val m = atlas.fx[f.name]
-            val done = when {
-                m == null -> true
-                f.dur > 0 -> f.t > f.dur
-                m[2] > 0f -> false
-                else -> f.t * m[1] >= m[0]
-            }
-            if (done) it.remove()
-        }
-    }
-
-    /** Döngüsel/tek seferlik efekti dünya konumunda çizer (size: dünya pikseli çap). */
-    private fun drawFxSprite(c: AndroidCanvas, name: String, wxp: Float, wyp: Float, size: Float, t: Float, rot: Float = 0f, alpha: Int = 255, fixedFrame: Int = -1) {
-        val m = atlas.fx[name] ?: return
-        val frames = m[0].toInt()
-        val fr = if (fixedFrame >= 0) fixedFrame.coerceAtMost(frames - 1) else {
-            val f = (t * m[1]).toInt()
-            if (m[2] > 0f) f.mod(frames) else f.coerceAtMost(frames - 1)
-        }
-        val sp = atlas["fx/$name/$fr"] ?: return
-        val pixel = m.size > 4 && m[4] > 0f
-        val paint = if (m[3] > 0f) (if (pixel) addPixPaint else addPaint) else if (pixel) fxPixPaint else alphaPaint
-        paint.alpha = alpha
-        val sx = wx(wxp); val sy = wy(wyp)
-        val k = size * scale / sp.w
-        if (rot != 0f) { c.save(); c.rotate(rot, sx, sy) }
-        atlas.draw(c, sp, sx, sy, k, paint)
-        if (rot != 0f) c.restore()
-        paint.alpha = 255
-    }
-
-    /** İksir etkileri: süre HUD'dan gelir; bitince ya da araçtayken çizilmez. */
-    private fun drawBuffs(c: AndroidCanvas) {
-        if (hud[Native.IN_VEHICLE] > 0.5f || hud[Native.DEAD] > 0.5f) return
-        val px = hud[Native.PX]; val py = hud[Native.PY] - 60
-        val hl = hud[Native.HEAL_T]
-        if (hl > 0f) drawFxSprite(c, "heal", px, py + 64, 62f, time, alpha = (230 * (hl / 1.2f).coerceIn(0f, 1f)).toInt())
-        // hız: bedeni saran camgöbeği rüzgâr girdabı; güç: ayak altında alev halkası (V7 piksel efektler, döngü)
-        fun ring(left: Float, name: String, y: Float, size: Float, ph: Float) {
-            if (left <= 0f) return
-            val a = (left / 1.2f).coerceIn(0f, 1f)
-            drawFxSprite(c, name, px, y, size, time + ph, alpha = (235 * a).toInt())
-        }
-        ring(hud[Native.POWER_T], "fire_ring", py + 62, 150f, 0f)
-        ring(hud[Native.SPEED_T], "wind_ring", py + 10, 135f, 0.3f)
-    }
-
-    private fun drawFx(c: AndroidCanvas) {
-        drawBuffs(c)
-        for (f in fxs) {
-            if (f.follow) { f.x = hud[Native.PX]; f.y = hud[Native.PY] - 60 }
-            val fade = if (f.dur > 0) ((f.dur - f.t) / 0.4f).coerceIn(0f, 1f) else 1f
-            val op = if (f.name == "toxic") 0.72f else 1f  // zehir bulutu yarı saydam: altındaki zombi görünsün
-            drawFxSprite(c, f.name, f.x, f.y, f.size, f.t, f.rot, (255 * fade * op).toInt(), f.frame)
-        }
+        fx3d.named(name, ex, ey, size, rot, dur, follow)
     }
 
     // ------------------------------------------------------------------ doku parçacıkları
@@ -5997,8 +5674,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
             }
             val sp = atlas["s/air_bomb"]
             if (sp != null) {
-                // düşüş ıslığı: bombanın arkasında beyaz hava izi
-                if (f > 0.15f) drawFxSprite(c, "bomb_whistle", b.x, b.y - alt / scale - 40f - 120f, 120f, b.t)
                 atlas.draw(c, sp, sx, by + 40f * scale, scale, pixelPaint); continue
             }
             val w = 16f * scale; val h = 44f * scale
@@ -6811,7 +6486,7 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         }
         // hızlı tuşlar
         btnVehicle.visible = hud[Native.NEAR_VEHICLE] > 0 || hud[Native.IN_VEHICLE] > 0
-        btnInteract.visible = !inVehicleNow() && (hud[Native.NEAR_MERCHANT] > 0 || hud[Native.NEAR_BENCH] > 0 || nearNpc >= 5 || nearChest >= 0)
+        btnInteract.visible = !inVehicleNow() && (hud[Native.NEAR_MERCHANT] > 0 || hud[Native.NEAR_BENCH] > 0 || nearNpc >= 5)
         nearCache = Online.nearest(220f)
         val nr = nearCache
         btnTrade.visible = nr != null && nr.dist < 170f && hud[Native.IN_VEHICLE] < 0.5f && rideUid == null
@@ -6829,7 +6504,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         if (btnRide.visible) roundBtn(c, btnRide, if (rideUid != null) "exit" else "car", if (rideUid != null) "İn" else "Yolcu Ol", 0xFF8A5AC0.toInt(), false)
         if (btnInteract.visible) {
             if (nearNpc >= 5 || hud[Native.NEAR_MERCHANT] > 0) roundBtn(c, btnInteract, "chat", "Konuş", 0xFFC08A20.toInt(), false)
-            else if (nearChest >= 0 && hud[Native.NEAR_BENCH] <= 0) roundBtn(c, btnInteract, "bag", "Sandık", 0xFF8A6A3A.toInt(), false)
             else if (hud[Native.NEAR_BENCH] > 0) roundBtn(c, btnInteract, "craft", "Tezgâh", 0xFFC08A20.toInt(), false)
             else roundBtn(c, btnInteract, "craft", null, 0xFFC08A20.toInt(), false)
         }
@@ -7215,14 +6889,13 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                     val px = hud[Native.PX]; val py = hud[Native.PY]
                     fx("dust", px, py, 160f); burst(px, py, 12, 0xFF9A8A70.toInt(), 180f, 4f)
                     vibrate(25, 120); shake(3f, 0.12f)
-                    Audio.play(if (wasIn) "crate" else "engine", 0.7f, if (wasIn) 1.3f else 1.15f)
+                    if (!wasIn) Audio.play("engine", 0.7f, 1.15f)
                 }
                 if (r.msg.isNotEmpty()) ui.onToast(r.msg)
             }
             "interact" -> when {
                 nearNpc >= 5 -> ui.onOpen("npc:${nearNpc - 4}")
                 hud[Native.NEAR_MERCHANT] > 0 -> ui.onOpen("npc:1")
-                nearChest >= 0 && hud[Native.NEAR_BENCH] <= 0 -> ui.onOpen("bag")
                 // V15 (R8): tezgâhın yanında tezgâh tarifleri açılır (önceden el üretimi açılıyordu)
                 hud[Native.NEAR_BENCH] > 0 -> ui.onOpen("craft_bench")
                 else -> ui.onOpen("craft")
@@ -10791,9 +10464,8 @@ fun PxSlot(item: JSONObject?, size: Dp, selected: Boolean = false, hint: String?
     }
 }
 
-// =========================================================================== çanta (sürükle-bırak + cepler + bölmeler + sandık)
+// =========================================================================== çanta (sürükle-bırak + cepler + bölmeler)
 private const val TAB = 100000
-private const val CHEST = 200000
 private const val EQ = 300000
 private const val VEH = 400000
 
@@ -10805,7 +10477,7 @@ private class DragState {
     fun target(): Int? = rects.entries.firstOrNull { it.value.contains(pos) }?.key
 }
 
-/** Miktar seçimi: yere bırak, böl, sandığa koy, çantaya al */
+/** Miktar seçimi: yere bırak, böl */
 internal class AmountAsk(val action: String, val slot: Int, val max: Int, val start: Int, val title: String)
 
 @Composable
@@ -10813,11 +10485,9 @@ fun InventoryScreen(back: () -> Unit, inGame: Boolean = false, onBuild: ((Int) -
     var tick by remember { mutableIntStateOf(0) }
     val inv = remember(tick) { GameSession.ui("inventory") }
     val hero = remember(tick / 20) { GameSession.ui("profile").optInt("character") }
-    val ci = inv.optInt("chest", -1)
-    val chest = remember(tick, ci) { if (ci >= 0) GameSession.ui("chest:$ci") else null }
     // bekleme süreleri akarken cepleri tazele
     LaunchedEffect(Unit) { while (true) { delay(500); tick++ } }
-    BagView(inv, hero, inGame, back, { name, kv -> GameSession.cmd(name, *kv) }, onCraft = onCraft, chest = chest, onBuild = onBuild) { tick++ }
+    BagView(inv, hero, inGame, back, { name, kv -> GameSession.cmd(name, *kv) }, onCraft = onCraft, onBuild = onBuild) { tick++ }
 }
 
 private val EQ_LEFT = listOf("helmet" to "Kask", "jacket" to "Ceket", "pants" to "Pantolon", "boots" to "Bot")
@@ -10836,14 +10506,12 @@ private val BagPanel2 = Color(0xA82B2B26)
 internal fun BagView(
     inv: JSONObject, hero: Int, inGame: Boolean, back: () -> Unit,
     cmd: (String, Array<Pair<String, Any>>) -> GameSession.Reply, onCraft: (() -> Unit)? = null,
-    chest: JSONObject? = null, onBuild: ((Int) -> Unit)? = null, refresh: () -> Unit,
+    onBuild: ((Int) -> Unit)? = null, refresh: () -> Unit,
 ) {
     var sel by remember { mutableStateOf<Int?>(null) }
     var selEq by remember { mutableStateOf<String?>(null) }
-    var selChest by remember { mutableStateOf<Int?>(null) }
     var selVeh by remember { mutableStateOf(false) }
     var page by remember { mutableIntStateOf(0) }
-    var showChest by remember { mutableStateOf(true) }
     var ask by remember { mutableStateOf<AmountAsk?>(null) }
     val drag = remember { DragState() }
     val haptic = LocalHapticFeedback.current
@@ -10854,9 +10522,6 @@ internal fun BagView(
     val pg = pages?.optJSONObject(page)?.takeIf { it.optBoolean("open") } ?: pages?.optJSONObject(0)
     val pStart = pg?.optInt("start", pockets) ?: pockets
     val pLen = pg?.optInt("len", n - pockets) ?: (n - pockets)
-    val ci = chest?.optInt("i", -1) ?: -1
-    val chestOn = chest != null && showChest
-    val chestSlots = chest?.optJSONArray("slots")
     var rootPos by remember { mutableStateOf(Offset.Zero) }
     val quiet = remember { MutableInteractionSource() }
     // öğretici: etkin rehber adımı ve işaretlenecek denetimlerin ekran konumları
@@ -10879,7 +10544,6 @@ internal fun BagView(
             return
         }
         if (to == VEH) {
-            if (from >= CHEST) return
             val r = cmd("veh_equip", arrayOf("slot" to from))
             if (!r.ok) Toaster.show(r.msg, false) else { Audio.play("pickup", 0.6f, 1.2f, bus = Audio.Bus.Ui); Toaster.show(r.msg) }
             sel = null
@@ -10896,18 +10560,12 @@ internal fun BagView(
         }
         if (to == null || to == from) return
         val r = when {
-            from >= CHEST -> when {
-                to >= EQ -> null
-                to >= CHEST -> cmd("chest_move", arrayOf("chest" to ci, "from" to from - CHEST, "to" to to - CHEST))
-                else -> cmd("chest_take", arrayOf("chest" to ci, "cslot" to from - CHEST))
-            }
             to >= EQ -> cmd("use", arrayOf("slot" to from))
-            to >= CHEST -> cmd("chest_put", arrayOf("chest" to ci, "slot" to from))
             to >= TAB -> cmd("move_page", arrayOf("from" to from, "page" to to - TAB))
             else -> cmd("move", arrayOf("from" to from, "to" to to))
-        } ?: return
+        }
         if (!r.ok && r.msg.isNotEmpty()) Toaster.show(r.msg, false) else Audio.play("pickup", 0.6f, 1.2f, bus = Audio.Bus.Ui)
-        sel = null; selChest = null
+        sel = null
     }
 
     fun dragMod(key: Int, s: JSONObject?) = Modifier
@@ -10927,7 +10585,7 @@ internal fun BagView(
         })
 
     fun slotMod(i: Int, s: JSONObject?) = dragMod(i, s).clickable(quiet, null) {
-        if (s != null) { Audio.play("click", 0.6f, bus = Audio.Bus.Ui); sel = i; selEq = null; selChest = null; selVeh = false }
+        if (s != null) { Audio.play("click", 0.6f, bus = Audio.Bus.Ui); sel = i; selEq = null; selVeh = false }
     }
 
     // kapalı bölme seçiliyse ana çantaya dön
@@ -10947,12 +10605,6 @@ internal fun BagView(
                 Spacer(Modifier.weight(1f))
                 Icon("coin", 18.dp, Px.Clan); Spacer(Modifier.width(4.dp)); PT(fmt(inv.optInt("gold")), 15.sp, Px.Clan)
                 Spacer(Modifier.width(10.dp))
-                if (chest != null) {
-                    PxButton(if (chestOn) "Ekipman" else "Sandık", height = 36.dp, size = 13.sp, color = Color(0xFF8A6A3A), icon = if (chestOn) "shirt" else "bag") {
-                        showChest = !showChest; selChest = null
-                    }
-                    Spacer(Modifier.width(6.dp))
-                }
                 if (onCraft != null) {
                     PxButton("Üret", Modifier.tutRect(tutR, "craft"), height = 36.dp, size = 13.sp, color = Px.Blue, icon = "craft") { onCraft() }
                     Spacer(Modifier.width(6.dp))
@@ -10961,47 +10613,13 @@ internal fun BagView(
             }
             Spacer(Modifier.height(6.dp))
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // ---- sol: ekipman ya da sandık
-                if (chestOn) {
-                    PxPanel(Modifier.width(250.dp).fillMaxHeight(), color = Color(0xB82A2116), pad = 8.dp) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            PT(chest.optString("name"), 14.sp, Px.Clan)
-                            Spacer(Modifier.weight(1f))
-                            PT("${chest.optInt("used")} / ${chest.optInt("cap")}", 12.sp, Px.Sub)
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        FlowRow(Modifier.weight(1f).verticalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            for (k in 0 until (chestSlots?.length() ?: 0)) {
-                                val s = chestSlots!!.optJSONObject(k)
-                                PxSlot(s, 54.dp, selChest == k, glow = drag.item != null && drag.target() == CHEST + k,
-                                    modifier = dragMod(CHEST + k, s).clickable(quiet, null) {
-                                        if (s != null) { Audio.play("click", 0.6f, bus = Audio.Bus.Ui); selChest = k; sel = null; selEq = null }
-                                    }.scale(if (drag.from == CHEST + k) 0.9f else 1f))
-                            }
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            PxButton("Hepsini Koy", Modifier.weight(1f), color = Px.Blue, height = 34.dp, size = 11.sp) {
-                                done(cmd("chest_all", arrayOf("chest" to ci, "put" to true)))
-                            }
-                            PxButton("Hepsini Al", Modifier.weight(1f), color = Px.Green, height = 34.dp, size = 11.sp) {
-                                done(cmd("chest_all", arrayOf("chest" to ci, "put" to false)))
-                            }
-                        }
-                        if (chest.optInt("used") == 0) {
-                            Spacer(Modifier.height(4.dp))
-                            PxButton("Sandığı Sök", Modifier.fillMaxWidth(), color = Px.Dark, height = 30.dp, size = 11.sp) {
-                                done(cmd("pickup_chest", arrayOf("chest" to ci)))
-                            }
-                        }
-                    }
-                } else {
+                // ---- sol: ekipman
                     val eq = inv.optJSONObject("eq") ?: JSONObject()
                     PxPanel(Modifier.width(196.dp).fillMaxHeight(), color = BagPanel2, pad = 8.dp) {
                         PT("Ekipman", 14.sp, Px.Clan, Modifier.align(Alignment.CenterHorizontally))
                         Row(Modifier.weight(1f).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                for ((k, label) in EQ_LEFT) EqBox(eq, k, label, selEq == k, dragMod(EQ + EQ_LEFT.indexOfFirst { it.first == k }, eq.optJSONObject(k))) { selEq = k; sel = null; selChest = null }
+                                for ((k, label) in EQ_LEFT) EqBox(eq, k, label, selEq == k, dragMod(EQ + EQ_LEFT.indexOfFirst { it.first == k }, eq.optJSONObject(k))) { selEq = k; sel = null }
                             }
                             Box(Modifier.width(54.dp).fillMaxHeight(), contentAlignment = Alignment.Center) {
                                 // 3B karakter elindeki silahla (kuşanınca hemen değişir)
@@ -11010,7 +10628,7 @@ internal fun BagView(
                                 Box(Modifier.fillMaxWidth().height(150.dp)) { HeroSprite(hero, 0, bt, true, actor = "bag", weapon = wm) }
                             }
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                for ((k, label) in EQ_RIGHT) EqBox(eq, k, label, selEq == k, dragMod(EQ + 4 + EQ_RIGHT.indexOfFirst { it.first == k }, eq.optJSONObject(k))) { selEq = k; sel = null; selChest = null }
+                                for ((k, label) in EQ_RIGHT) EqBox(eq, k, label, selEq == k, dragMod(EQ + 4 + EQ_RIGHT.indexOfFirst { it.first == k }, eq.optJSONObject(k))) { selEq = k; sel = null }
                             }
                         }
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -11019,7 +10637,6 @@ internal fun BagView(
                             PxStat("shield", "${inv.optDouble("armor").toInt()}", Px.Sub)
                         }
                     }
-                }
                 // ---- cepler: oyunda hızlı kullanım tuşları; altında araç yuvası (araba/motosiklet sürüklenir)
                 PxPanel(Modifier.width(70.dp).fillMaxHeight(), color = BagPanel, pad = 6.dp) {
                     PT("Cepler", 12.sp, Px.Clan, Modifier.align(Alignment.CenterHorizontally))
@@ -11034,7 +10651,7 @@ internal fun BagView(
                     val veh = inv.optJSONObject("veh")?.takeIf { it.optString("id").isNotEmpty() }
                     val vehDrop = drag.item != null && drag.target() == VEH && drag.item?.optString("id")?.startsWith("veh_") == true
                     VehSlot(veh, 48.dp, selVeh, vehDrop, dragMod(VEH, veh).align(Alignment.CenterHorizontally).clickable(quiet, null) {
-                        if (veh != null) { Audio.play("click", 0.6f, bus = Audio.Bus.Ui); selVeh = true; sel = null; selEq = null; selChest = null }
+                        if (veh != null) { Audio.play("click", 0.6f, bus = Audio.Bus.Ui); selVeh = true; sel = null; selEq = null }
                         else Toaster.show("Arabanı ya da motosikletini basılı tutup buraya sürükle")
                     })
                 }
@@ -11069,17 +10686,17 @@ internal fun BagView(
                 // ---- ayrıntı ve eylemler
                 PxPanel(Modifier.width(196.dp).fillMaxHeight(), color = BagPanel, pad = 8.dp) {
                     val item: JSONObject? = sel?.let { slots?.optJSONObject(it) } ?: selEq?.let { (inv.optJSONObject("eq") ?: JSONObject()).optJSONObject(it) }
-                        ?: selChest?.let { chestSlots?.optJSONObject(it) } ?: if (selVeh) inv.optJSONObject("veh")?.takeIf { it.optString("id").isNotEmpty() } else null
+                        ?: if (selVeh) inv.optJSONObject("veh")?.takeIf { it.optString("id").isNotEmpty() } else null
                     if (item == null) {
                         PT("Bir Eşya Seç", 14.sp, Px.Sub, Modifier.align(Alignment.CenterHorizontally).padding(top = 20.dp))
                         Spacer(Modifier.height(8.dp))
-                        PT("İksir ve ilk yardımı cebe koy: oyunda tek dokunuşla kullanılır. Eşyayı basılı tutup bölme sekmesine, sandığa ya da ekipmana sürükleyebilirsin.",
+                        PT("İksir ve ilk yardımı cebe koy: oyunda tek dokunuşla kullanılır. Eşyayı basılı tutup bölme sekmesine ya da ekipmana sürükleyebilirsin.",
                             11.sp, Px.Sub, maxLines = 7)
                     } else {
                         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) { PxItemDetail(item) }
                         val count = item.optInt("count", 1)
                         val kind = item.optString("kind")
-                        val s = sel; val cs = selChest
+                        val s = sel
                         // onarım: tezgâhta ya da Tamirci Viktor'un yanında (bedel eksik canla orantılı)
                         if (item.optInt("dur", 100) < 100 && (s != null || selEq != null)) {
                             val near = inv.optBoolean("can_repair")
@@ -11092,7 +10709,6 @@ internal fun BagView(
                         if (s != null) {
                             val equippable = kind in EQUIP_KINDS
                             val usable = kind == "Consumable" || item.optString("id") == "fuel"
-                            val placeable = kind == "Chest" && inGame
                             val key = item.optString("id").startsWith("veh_") && inGame
                             val vehItem = item.optString("id").startsWith("veh_")
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -11100,7 +10716,7 @@ internal fun BagView(
                                 if (kind == "Bench" && onBuild != null) PxButton("Kur", Modifier.fillMaxWidth().tutRect(tutR, "act"), icon = "hammer", height = 38.dp, size = 14.sp) {
                                     sel = null; onBuild(s)
                                 }
-                                if (equippable || usable || placeable || key) PxButton(when { equippable -> "Kuşan"; placeable -> "Üsse Kur"; key -> "Aracı Çağır"; else -> "Kullan" },
+                                if (equippable || usable || key) PxButton(when { equippable -> "Kuşan"; key -> "Aracı Çağır"; else -> "Kullan" },
                                     Modifier.fillMaxWidth().tutRect(tutR, "act"), height = 38.dp, size = 14.sp) {
                                     val r = cmd("use", arrayOf("slot" to s)); Toaster.show(r.msg, r.ok); sel = null; refresh()
                                     // V16: balta/kazma kuşanılınca elde tutmanın faydası bir kez hatırlatılır
@@ -11113,10 +10729,6 @@ internal fun BagView(
                                     val free = (0 until pockets).firstOrNull { slots!!.isNull(it) } ?: 0
                                     val r = cmd("move", arrayOf("from" to s, "to" to free)); if (!r.ok) Toaster.show(r.msg, false); sel = null; refresh()
                                 }
-                                if (chestOn) PxButton("Sandığa Koy", Modifier.fillMaxWidth(), color = Color(0xFF8A6A3A), height = 32.dp, size = 12.sp) {
-                                    if (count > 1) ask = AmountAsk("put", s, count, count, "Sandığa Koy")
-                                    else { done(cmd("chest_put", arrayOf("chest" to ci, "slot" to s))); sel = null }
-                                }
                                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                     if (count > 1) PxButton("Böl", Modifier.weight(1f), color = Px.Dark, height = 32.dp, size = 12.sp) {
                                         ask = AmountAsk("split", s, count - 1, count / 2, "Yığını Böl")
@@ -11126,11 +10738,6 @@ internal fun BagView(
                                         else { done(cmd("drop", arrayOf("slot" to s))); sel = null }
                                     }
                                 }
-                            }
-                        } else if (cs != null) {
-                            PxButton("Çantaya Al", Modifier.fillMaxWidth(), color = Px.Green, height = 38.dp, size = 14.sp) {
-                                if (count > 1) ask = AmountAsk("take", cs, count, count, "Çantaya Al")
-                                else { done(cmd("chest_take", arrayOf("chest" to ci, "cslot" to cs))); selChest = null }
                             }
                         } else if (selVeh) {
                             if (inGame) PxButton("Bin", Modifier.fillMaxWidth(), color = Px.Green, height = 38.dp, size = 14.sp, icon = "check") {
@@ -11161,11 +10768,9 @@ internal fun BagView(
             AmountDialog(a, close = { ask = null }) { k ->
                 val r = when (a.action) {
                     "drop" -> cmd("drop", arrayOf("slot" to a.slot, "n" to k))
-                    "split" -> cmd("split", arrayOf("slot" to a.slot, "n" to k))
-                    "put" -> cmd("chest_put", arrayOf("chest" to ci, "slot" to a.slot, "n" to k))
-                    else -> cmd("chest_take", arrayOf("chest" to ci, "cslot" to a.slot, "n" to k))
+                    else -> cmd("split", arrayOf("slot" to a.slot, "n" to k))
                 }
-                ask = null; sel = null; selChest = null
+                ask = null; sel = null
                 done(r)
             }
         }
@@ -12142,7 +11747,7 @@ private fun WorldTab(report: (String, Boolean) -> Unit) {
     }
     val areas = st.optJSONArray("areas") ?: JSONArray()
     val kinds = st.optJSONArray("kinds") ?: JSONArray()
-    var kind by remember { mutableStateOf("walker") }
+    var kind by remember { mutableStateOf("dark") }
     var n by remember { mutableStateOf("5") }
     var lv by remember { mutableStateOf("") }
     var tx by remember { mutableStateOf("") }
@@ -12166,7 +11771,6 @@ private fun WorldTab(report: (String, Boolean) -> Unit) {
             Field(n, { n = it.filter(Char::isDigit).take(2) }, "Adet", Modifier.width(80.dp))
             Field(lv, { lv = it.filter(Char::isDigit).take(2) }, "Seviye", Modifier.width(100.dp))
             PxButton("Çağır", color = Px.Red, icon = "skull", height = 40.dp, size = 13.sp) { run("spawn $kind ${n.ifBlank { "1" }}" + (if (lv.isNotBlank()) " $lv" else "")) }
-            PxButton("Titan", color = Color(0xFF7A3A2A), height = 40.dp, size = 13.sp) { run("boss") }
             Spacer(Modifier.weight(1f))
             PxButton("Hepsini Sil", color = Px.Dark, height = 40.dp, size = 13.sp) { run("killall") }
         }
@@ -12208,7 +11812,6 @@ data class EventDef(val id: String, val title: String, val icon: String, val des
 
 val EVENTS = listOf(
     EventDef("blood_moon", "Kan Ayı", "skull", "Zombi öldür; güçlü zombiler daha çok puan verir.", "blood"),
-    EventDef("titan_hunt", "Titan Avı", "flame", "Titanlara verdiğin hasar ve titan öldürmeleri puan.", "titan"),
     EventDef("base_storm", "Üs Fırtınası", "shield", "Devlet üssü ele geçir ve asker öldür.", "base"),
     EventDef("scavengers", "Hurdacılar", "hammer", "Topla ve üret: ağaç, taş, hurda, üretilen eşya.", "scrap"),
     EventDef("pack_leader", "Sürü Lideri", "paw", "Köpeğinin öldürdükleri ve köpek seviyesi puan.", "pack"),
@@ -13093,13 +12696,14 @@ private fun OpenButton(label: String, price: Int, ribbon: String?, enabled: Bool
     }
 }
 
-/** Kaplama önizlemesi: karakter (kahraman çizimi) ya da araç (V8 cip) renk matrisiyle; efsanevide dönen hale */
+/** Kaplama önizlemesi: karakter (kahraman çizimi) ya da araç (3B Hellhound) renk matrisiyle; efsanevide dönen hale */
 @Composable
 fun SkinPreview(id: String, modifier: Modifier, t: Float, small: Boolean = false) {
     val ctx = LocalContext.current
     val vehicle = id.startsWith("vs_")
-    val key = if (vehicle) "x/car" else "l/kaan/0_0"
-    val img = remember(key) { SpriteCache.get(ctx, key) ?: SpriteCache.get(ctx, if (vehicle) "v/car/2" else "h/kaan/idle_0_0") }
+    val car = if (vehicle) rememberVehicleIcon("veh_car") else null
+    val hero = remember(vehicle) { if (vehicle) null else SpriteCache.get(ctx, "l/kaan/0_0") ?: SpriteCache.get(ctx, "h/kaan/idle_0_0") }
+    val img = car ?: hero
     val mtx = remember(id) { Skins.matrix(id)?.let { ColorFilter.colorMatrix(ColorMatrix(it)) } }
     val rar = com.zenvex.online.Skins.trail(id) != 0
     Box(modifier.clip(RoundedCornerShape(3.dp)).background(Brush.radialGradient(listOf(if (rar) LEG.copy(alpha = 0.35f) else EPIC.copy(alpha = 0.3f), Color(0xFF10101C))))
@@ -13306,7 +12910,7 @@ object Demo {
 
 /** NPC portre görseli (atlas npc/<ad>) */
 fun npcSprite(kind: Int) = when (kind) {
-    1 -> "npc/merchant"; 2 -> "npc/quest"; 3 -> "npc/doctor"; 4 -> "npc/mechanic"; 5 -> "npc/trainer"; 7 -> "npc/wizard"; else -> "npc/soldier"
+    1 -> "npc/merchant"; 2 -> "npc/quest"; 3 -> "npc/doctor"; 4 -> "npc/mechanic"; 5 -> "npc/trainer"; 7 -> "npc/wizard"; else -> null
 }
 
 /** Oyun içinde NPC'ye dokununca: konuşma (Rust talk komutu). */
@@ -13365,7 +12969,7 @@ internal fun NpcDialogView(d: JSONObject, onOption: (String) -> Unit, onClose: (
             // portre
             Box(Modifier.size(170.dp, 220.dp), contentAlignment = Alignment.BottomCenter) {
                 // 3B model konuşma animasyonuyla; model yoksa eski görsel
-                if (!Npc3DView(d.optInt("npc"), t)) SpriteImage(npcSprite(d.optInt("npc")), Modifier.fillMaxSize().offset(y = (sin(t * 2f) * 1.5f).dp))
+                if (!Npc3DView(d.optInt("npc"), t)) npcSprite(d.optInt("npc"))?.let { SpriteImage(it, Modifier.fillMaxSize().offset(y = (sin(t * 2f) * 1.5f).dp)) }
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
@@ -13551,8 +13155,7 @@ data class EventInfo(val color: Color, val icon: String, val story: String, val 
 
 val EVENT_INFO = mapOf(
     "blood_moon" to EventInfo(Color(0xFFE0302A), "skull", "Kızıl ay doğdu, zombiler kudurdu. Ne kadar çok ve ne kadar güçlü zombi devirirsen o kadar yükselirsin.",
-        "Aylak 1 · Koşucu 2 · Köpek 2 · Zehirli 3 · Karanlık 4 · Tank 8 · Gizemli 10 · Titan 50", "blood", "ev_blood"),
-    "titan_hunt" to EventInfo(Color(0xFFE0904A), "flame", "Titanlar uyandı. Dev avcılarının en iyisi kim?", "Her Titan 1.000 Puan", "titan", "ev_titan"),
+        "Sıradan 1 · Koşucu 2 · Sürü 2 · Zehirli 3 · Karanlık 4 · Tank 8", "blood", "ev_blood"),
     "base_storm" to EventInfo(Color(0xFF6AB8FF), "shield", "Devlet üslerine fırtına gibi gir. Askerleri düşür, üsleri ele geçir.", "Asker 10 · Üs Ele Geçirme 500", "base", "ev_base"),
     "scavengers" to EventInfo(Color(0xFF9AD84A), "hammer", "Şehir yağmalanmayı bekliyor. Topla, aç, üret.", "Ağaç 2 · Sandık 5 · Üretim 10", "scrap", "ev_scrap"),
     "pack_leader" to EventInfo(Color(0xFFC07AFF), "paw", "Köpeğinle birlikte avlan. Sürünün lideri ol.", "Köpeğinin Her Avı 5 Puan", "pack", "ev_pack"),
@@ -13560,7 +13163,7 @@ val EVENT_INFO = mapOf(
 )
 
 /** 3. sıra ödülü etkinlik silahları (data.rs ev_<önek>_weapon) */
-val EVENT_WEAPON = mapOf("blood" to "Kan Ayı Orağı", "titan" to "Titan Kırıcı Balyoz", "base" to "Fırtına Baltası",
+val EVENT_WEAPON = mapOf("blood" to "Kan Ayı Orağı", "base" to "Fırtına Baltası",
     "scrap" to "Hurdacı Testere Kılıcı", "pack" to "Sürü Lideri Pençesi", "breath" to "Son Nefes Tırpanı")
 
 /**
@@ -14304,7 +13907,7 @@ private fun DogDialog(close: () -> Unit) {
         val near = d.optBoolean("near")
         if (!d.optBoolean("owned")) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                SpriteImage("z/dog/idle_0_0", Modifier.size(90.dp))
+                SpriteImage("p/dog0/idle_0_0", Modifier.size(90.dp))
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     PT("Sadık bir yol arkadaşı", 18.sp)
@@ -14503,7 +14106,7 @@ object MaintMsg {
 fun NoConnectionScreen() {
     val t = rememberTime()
     Box(Modifier.fillMaxSize().background(Color(0xFF0C0E16)).clickable(remember { MutableInteractionSource() }, null) {}) {
-        LiveScene(SceneKind.LOBBY, dim = 0.45f)
+        EventBackdrop(dim = 0.45f)
         Column(Modifier.align(Alignment.Center).metalFrame().padding(horizontal = 30.dp, vertical = 26.dp),
             horizontalAlignment = Alignment.CenterHorizontally) {
             Icon("radio", 44.dp, Px.Orange.copy(alpha = 0.5f + 0.5f * kotlin.math.sin(t * 4f)))
@@ -15279,9 +14882,8 @@ data class BoardCat(val kind: String, val name: String, val icon: String, val ti
 /** Sıralamaya nasıl girilir (kategori başına kısa not) */
 val BOARD_HOW = mapOf(
     "level" to "Karakterinin seviyesi. Görev yap, zombi avla, üret: her şey tecrübe verir.",
-    "kills" to "Öldürdüğün her zombi sayılır. Seçkinler ve titanlar da dahil.",
+    "kills" to "Öldürdüğün her zombi sayılır. Seçkinler de dahil.",
     "pvp" to "PvP bölgelerinde (Donmuş Liman, Cephe Hattı) yendiğin oyuncular.",
-    "titan" to "Her 15 dakikada başka bir bölgede uyanan Titan'ı düşürdüğün sayı (son vuruş ya da yakında olmak yeter).",
     "soldiers" to "Cephe Hattı'ndaki devlet ve klan üslerinde indirdiğin askerler.",
     "bases" to "Klanınla birlikte bayrağın dibinde durup ele geçirdiğin üsler.",
     "dog" to "Son vuruşu senin köpeğinin yaptığı zombiler. Köpeğini Eğitmen Jack'te geliştir.",
@@ -15294,7 +14896,6 @@ val BOARD_CATS = listOf(
     BoardCat("level", "Seviye", "star", "Efsane", "lb_level") { "Sv $it" },
     BoardCat("kills", "Zombi Avı", "skull", "Canavar Avcısı", "lb_kills") { "${fmtL(it)} Zombi" },
     BoardCat("pvp", "Oyuncu Avı", "attack", "Oyuncu Katili", "lb_pvp") { "${fmtL(it)} Oyuncu" },
-    BoardCat("titan", "Titan", "flame", "Titan Avcısı", "lb_titan") { "${fmtL(it)} Titan" },
     BoardCat("soldiers", "Asker", "shield", "Savaş Lordu", "lb_soldiers") { "${fmtL(it)} Asker" },
     BoardCat("bases", "Üs Fethi", "map", "Fatih", "lb_bases") { "${fmtL(it)} Üs" },
     BoardCat("dog", "Köpek", "paw", "Sürü Lideri", "lb_dog") { "${fmtL(it)} Av" },
@@ -15694,7 +15295,6 @@ internal fun PlayerProfileView(o: JSONObject?, err: String, mine: Boolean, close
                     StatBox("star", "Seviye", "${o.optInt("level", 1)}", Px.Level)
                     StatBox("skull", "Zombi", fmtL(o.optLong("kills")), Color(0xFFFF8A7A))
                     StatBox("calendar", "Oyun Süresi", "${fmtL(o.optLong("hours"))} Saat", Px.Text)
-                    StatBox("flame", "Titan", fmtL(st.optLong("titan")), BRONZE)
                     StatBox("shield", "Asker", fmtL(st.optLong("soldiers")), Px.Text)
                     StatBox("map", "Üs Fethi", fmtL(st.optLong("bases")), GOLD)
                     StatBox("paw", "Köpek Avı", fmtL(st.optLong("dog")), Px.Text)
@@ -16175,8 +15775,6 @@ enum class SceneKind(
     val skyTop: Long, val skyMid: Long, val horizon: Long, val sun: Long, val fire: Long,
     val far: Long, val mid: Long, val near: Long, val fog: Long,
 ) {
-    /** yıkık şehir, gün batımı */
-    LOBBY(0xFF0A0720, 0xFF3B1447, 0xFFFF7B3A, 0xFFFFC27A, 0xFFFF8A2A, 0xFF4A2656, 0xFF2A1634, 0xFF120A1A, 0xFFB5527A),
     /** kor kızıl gece, yanık bölge */
     EMBER(0xFF120508, 0xFF4A0E12, 0xFFFF4A24, 0xFFFFA060, 0xFFFF5A1E, 0xFF5A1C1E, 0xFF331012, 0xFF140708, 0xFFC03A2A),
     /** soğuk mavi gece, liman */
@@ -16211,7 +15809,7 @@ private class Skyline(val layer: Int, val blds: List<Bld>)
  */
 @Composable
 fun LiveScene(
-    kind: SceneKind = SceneKind.LOBBY, modifier: Modifier = Modifier.fillMaxSize(), dim: Float = 0f, still: Float? = null,
+    kind: SceneKind = SceneKind.EMBER, modifier: Modifier = Modifier.fillMaxSize(), dim: Float = 0f, still: Float? = null,
     content: @Composable BoxScope.() -> Unit = {},
 ) {
     val ts = rememberTimeState(1f / 40f)
@@ -16251,7 +15849,7 @@ private val FIRE_TONGUES = listOf(floatArrayOf(0f, 1.15f, 3.0f, 1f), floatArrayO
 private const val STRIDE_PER_HEIGHT = 0.46f
 
 /** sahnedeki zombi türleri (atlas önekleri) ve boy çarpanı */
-private val SCENE_ZOMBIES = listOf("walker" to 1f, "runner" to 1.02f, "tank" to 1.22f, "dark" to 1f, "dog" to 0.62f, "walker" to 1f, "runner" to 1.02f)
+private val SCENE_ZOMBIES = listOf("lumberjack" to 1f, "office" to 1.02f, "tank" to 1.22f, "dark" to 1f, "wolf" to 0.62f, "charred" to 1f, "mummy" to 1.02f)
 
 /** 3B arabanın sahne karesi: görsel + ayak çapası + kare ölçeği (metre başına piksel) */
 private class SceneCar(val img: ImageBitmap, val ax: Float, val ay: Float, val pxPerM: Float)
@@ -16630,7 +16228,7 @@ private fun DrawScope.drawScene(w: World, k: SceneKind, t: Float, fx: Int, zombi
         ), size = Size(W, H))
         if (fl > 0f) drawRect(Color.White.copy(alpha = 0.18f * fl), size = Size(W, horizonY))
         for (s in w.stars) {
-            val a = (0.25f + 0.75f * (0.5f + 0.5f * sin(t * s[2] * 1.6f + s[3]))) * (1f - s[1] / 0.6f).coerceIn(0f, 1f) * (if (k == SceneKind.LOBBY) 0.55f else 0.9f)
+            val a = (0.25f + 0.75f * (0.5f + 0.5f * sin(t * s[2] * 1.6f + s[3]))) * (1f - s[1] / 0.6f).coerceIn(0f, 1f) * 0.9f
             drawCircle(Color.White.copy(alpha = a), (0.6f + s[2] * 0.9f) * density, Offset(s[0] * W, s[1] * H))
         }
         drawCircle(rg(listOf(c(k.sun, 0.55f), c(k.sun, 0.18f), Color.Transparent), Offset(sunX, sunY), H * 0.55f), H * 0.55f, Offset(sunX, sunY))
@@ -17001,8 +16599,8 @@ fun LobbyScreen(go: (Screen) -> Unit, epoch: Int) {
     val kicked = com.zenvex.online.Session.kicked.value
     LaunchedEffect(kicked) { if (kicked != null) { Toaster.show(kicked, false); com.zenvex.online.Session.kicked.value = null } }
 
-    // sahne: kodla çizilen canlı yıkık şehir (gün batımı, yangınlar, kor yağmuru, uzakta sürünen zombi silüetleri, kamp ateşi)
-    LiveScene(SceneKind.LOBBY) {
+    // arka plan: etkinlik görseli (Kanlı Ay)
+    EventBackdrop {
         // ---- sol: büyük logo + slogan
         Column(Modifier.align(Alignment.TopStart).padding(start = 54.dp, top = 70.dp), horizontalAlignment = Alignment.Start) {
             // tek satır "Zenvex Online" eski iki satırlıdan geniş: oyuncu kartına değmesin
@@ -17922,7 +17520,7 @@ private fun QuestRow(q: JSONObject) {
     val done = q.optBoolean("done")
     val goal = q.optInt("goal", 1); val prog = q.optInt("progress")
     val icon = when {
-        q.optString("id").contains("titan") -> "flame"; q.optString("id").contains("soldier") -> "shield"
+        q.optString("id").contains("soldier") -> "shield"
         q.optString("id").contains("base") -> "map"; q.optString("id").contains("craft") -> "hammer"
         q.optString("id").contains("crate") -> "gift"; q.optString("id").contains("chop") -> "wood"
         q.optString("id").contains("dog") -> "paw"; q.optString("id").contains("level") -> "star"
@@ -18171,15 +17769,18 @@ data class AvatarDef(val key: String, val name: String, val crop: Float, val pic
                      /** 3B model portresi (Model3D adı); doluysa eski görsel yerine bu kullanılır */
                      val model: String = "")
 
+/** Görseli oyundan kaldırılmış eski seçenek: sıra numarası korunur, seçilemez ve gösterilmez */
+private val REMOVED_AVATAR = AvatarDef("", "", 1f, false)
+
 val AVATARS = listOf(
     AvatarDef("l/kaan/0_0", "Savaşçı", 0.42f, false),
     AvatarDef("npc/merchant", "Tüccar", 0.4f, fx = 51f, fy = 29f, model = "npc_marco"), AvatarDef("npc/quest", "Görevci", 0.4f, fx = 24f, fy = 21f, model = "npc_silas"),
     AvatarDef("npc/doctor", "Doktor", 0.4f, fx = 37f, fy = 16f, model = "npc_elena"),
     AvatarDef("npc/mechanic", "Tamirci", 0.4f, fx = 29f, fy = 18f, model = "npc_viktor"), AvatarDef("npc/trainer", "Eğitmen", 0.4f, fx = 37f, fy = 16f, model = "npc_jack"),
-    AvatarDef("npc/soldier", "Muhafız", 0.4f, false),
-    AvatarDef("p/dog0/idle_0_0", "Yavru Köpek", 1f, false), AvatarDef("p/dog5/idle_0_0", "Kurt Köpeği", 1f, false), AvatarDef("p/dog10/idle_0_0", "Alfa", 1f, false),
-    AvatarDef("z/walker/idle_0_0", "Aylak", 0.5f, false), AvatarDef("z/runner/idle_0_0", "Koşucu", 0.5f, false), AvatarDef("z/toxic/idle_0_0", "Zehirli", 0.5f, false),
-    AvatarDef("z/dark/idle_0_0", "Karanlık", 0.5f, false), AvatarDef("z/dog/idle_0_0", "Kuduz", 1f, false), AvatarDef("z/titan/idle_0_0", "Titan", 0.45f, false),
+    REMOVED_AVATAR,
+    AvatarDef("p/dog0/idle_0_0", "Yavru Köpek", 1f, false), REMOVED_AVATAR, REMOVED_AVATAR,
+    REMOVED_AVATAR, REMOVED_AVATAR, REMOVED_AVATAR,
+    AvatarDef("z/dark/idle_0_0", "Karanlık", 0.5f, false), REMOVED_AVATAR, REMOVED_AVATAR,
     AvatarDef("npc/wizard", "Büyücü Aldric", 0.4f, fx = 30f, fy = 20f, model = "npc_aldric"),
 )
 
@@ -19351,7 +18952,7 @@ fun SplashScreen(done: () -> Unit) {
         delay(400)
         done()
     }
-    LiveScene(SceneKind.LOBBY, dim = 0.12f) {
+    EventBackdrop(dim = 0.12f) {
         Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
             CodeLogo(120.dp)
             Spacer(Modifier.height(18.dp))
@@ -19381,7 +18982,6 @@ val TIPS = listOf(
     "İpucu: Toksik zombiler öldüklerinde zehir bulutu bırakır. Panzehir taşı!",
     "İpucu: Karanlık zombiler geceleri daha sık çıkar ve ışınlanır.",
     "İpucu: Çalışma tezgâhında kask, yelek, bot ve çanta üretebilirsin.",
-    "İpucu: Titan'ı yenersen Titan Parçası düşer: efsanevi Titan setinin malzemesi.",
     "İpucu: Araçlar yakıt harcar; çantadaki benzin otomatik kullanılır.",
 )
 
@@ -19421,7 +19021,7 @@ fun LoadingScreen(back: () -> Unit = {}, done: () -> Unit) {
         delay(200)
         done()
     }
-    LiveScene(SceneKind.LOBBY, dim = 0.1f) {
+    EventBackdrop(dim = 0.1f) {
         CodeLogo(100.dp, Modifier.align(Alignment.TopCenter).padding(top = 24.dp))
         Column(Modifier.align(Alignment.BottomCenter).padding(bottom = 40.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             PT(GameSession.server.value.title, 26.sp, Px.Clan, outline = true)
@@ -21683,12 +21283,6 @@ fun GuideBubble() {
         val top = maxOf(maxHeight * com.zenvex.online.HudLayout.tutTop, 158.dp)
         androidx.compose.foundation.layout.Row(Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = top + ((1f - a) * -10f).dp)
             .alpha(a), verticalAlignment = Alignment.Top) {
-            if (diana) {
-                Box(Modifier.size(58.dp, 64.dp).clip(RoundedCornerShape(6.dp)).background(Color(0xD8141310)).border(1.5.dp, Color(0xFF6A5A3A), RoundedCornerShape(6.dp))) {
-                    ArtImage("commander_portrait", Modifier.fillMaxSize())
-                }
-                androidx.compose.foundation.layout.Spacer(Modifier.width(4.dp))
-            }
             Column(Modifier.widthIn(max = 300.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xE6141310))
                 .border(1.5.dp, Color(0xFF6A5A3A), RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 7.dp)) {
                 PT(if (diana) "Komutan Diana" else "İlk Adımlar", 12.sp, Color(0xFFFFD34A))
@@ -21730,6 +21324,26 @@ object UiArt {
         val i = bitmap(ctx, name)?.asImageBitmap() ?: return null
         imgs[name] = i
         return i
+    }
+}
+
+/**
+ * Lobi, yükleme ve bağlantı ekranlarının arka planı: etkinlik görseli (Kanlı Ay, assets/ui/ev_blood) ekranı
+ * kaplayacak biçimde kırpılır (en yakın komşu, piksel sanatı bozulmaz). [dim]: üstüne koyulaştırma.
+ */
+@Composable
+fun EventBackdrop(dim: Float = 0f, art: String = "ev_blood", content: @Composable BoxScope.() -> Unit = {}) {
+    val ctx = LocalContext.current
+    val img = remember(art) { UiArt.image(ctx, art) }
+    Box(Modifier.fillMaxSize().background(Color(0xFF0B0507))) {
+        if (img != null) Canvas(Modifier.fillMaxSize()) {
+            val k = maxOf(size.width / img.width, size.height / img.height)
+            val w = img.width * k; val h = img.height * k
+            drawImage(img, IntOffset.Zero, IntSize(img.width, img.height), IntOffset(((size.width - w) / 2).toInt(), ((size.height - h) / 2).toInt()),
+                IntSize(w.toInt(), h.toInt()), filterQuality = FilterQuality.None)
+            if (dim > 0f) drawRect(Color.Black.copy(alpha = dim.coerceIn(0f, 1f)))
+        }
+        content()
     }
 }
 
@@ -22113,7 +21727,7 @@ private val STARS = java.util.Random(11).let { r -> List(70) { floatArrayOf(r.ne
 /**
  * Büyücü Aldric'in haritası: her bölge ayrı bir harita olduğu için karanlık büyülü boşlukta süzülen **ayrı adalar**
  * olarak görünür (4×2). Adaya dokununca sağda kartı açılır: önerilen seviye, gereken seviye, yaratıklar, çıkan eşyalar,
- * ücret ve "Işınlan". Kilitli ada kararır, bulunulan adada mavi işaret, Titan'ın adasında kırmızı rozet.
+ * ücret ve "Işınlan". Kilitli ada kararır, bulunulan adada mavi işaret.
  * Görseller: assets/ui/island_<kimlik>.png (saydam zeminli ada) ve wizard_bg.png (boşluk); yoksa adalar bölgenin kendi
  * piksel haritasından bir kesitle, boşluk yıldızlarla kodla çizilir.
  */
@@ -22229,11 +21843,6 @@ internal fun WizardMapView(data: JSONObject, items: Map<String, Pair<String, Int
                             drawCircle(Color(0x553A8AFF), 12.dp.toPx() * (1f + 0.25f * sin(t * 3f)), c)
                             drawCircle(Color.White, 6.dp.toPx(), c); drawCircle(Color(0xFF3A8AFF), 4.dp.toPx(), c)
                         }
-                        if (a.optBoolean("titan")) {
-                            val p = Offset(c.x + half * 0.75f, c.y - half * 0.65f)
-                            drawCircle(Color(0x66FF2A1A), 14.dp.toPx() * (1f + 0.2f * sin(t * 5f)), p)
-                            drawCircle(Color(0xFF120C18), 10.dp.toPx(), p); drawCircle(Color(0xFFE03A2A), 8.dp.toPx(), p)
-                        }
                     }
                 }
                 // öğretici: gidilecek adanın kutusu
@@ -22254,7 +21863,6 @@ internal fun WizardMapView(data: JSONObject, items: Map<String, Pair<String, Int
                         if (!open) Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon("lock", 12.dp, Px.Sub); Spacer(Modifier.width(3.dp)); PT("Sv ${a.optInt("level")}", 12.sp, Color(0xFFE07060))
                         } else if (i == here) PT("Buradasın", 11.sp, Color(0xFF7AB8FF))
-                        else if (a.optBoolean("titan")) PT("Titan Burada!", 11.sp, Color(0xFFFF5A4A))
                     }
                 }
             }
@@ -22393,11 +22001,10 @@ fun areaIndexAt(areas: List<MapArea>, x: Float, y: Float): Int {
     return areas.indexOfFirst { it.contains(x, y) }
 }
 
-/** Haritadaki bir işaret (dünya pikseli). kind: 0 oyuncu, 1 seyahat, 2 titan, 3 görev, 4 kamp NPC'si, 5 devlet üssü */
+/** Haritadaki bir işaret (dünya pikseli). kind: 0 oyuncu, 1 seyahat, 3 görev, 4 önemli yer, 5 devlet üssü, 6 tüccar, 8 kamp NPC'si */
 data class MapMark(val x: Float, val y: Float, val kind: Int, val label: String = "", val sub: String = "", val color: Int = 0, val icon: String = "")
 
 /** işaret türleri (MapMark.kind) */
-const val MK_TITAN = 2
 const val MK_QUEST = 3
 const val MK_PLACE = 4
 const val MK_BASE = 5
@@ -22410,15 +22017,6 @@ internal fun DrawScope.drawMarkIcon(kind: Int, p: Offset, t: Float, k: Float = 1
     val d = density * k
     val ink = Color(0xFF15140F)
     when (kind) {
-        MK_TITAN -> {
-            // kızıl kafatası rozeti: dönen diken halkası
-            for (i in 0 until 8) {
-                val a = t * 0.8f + i * (PI.toFloat() / 4f)
-                drawCircle(Color(0xFFE03030), 2.2f * d, Offset(p.x + kotlin.math.cos(a) * 11f * d, p.y + sin(a) * 11f * d))
-            }
-            drawCircle(ink, 9f * d, p); drawCircle(Color(0xFFE03030), 7f * d, p)
-            drawCircle(ink, 1.8f * d, Offset(p.x - 2.5f * d, p.y - 1f * d)); drawCircle(ink, 1.8f * d, Offset(p.x + 2.5f * d, p.y - 1f * d))
-        }
         MK_QUEST -> {
             val pulse = 1f + 0.25f * sin(t * 4f)
             drawCircle(Color(0x55FF9A2A), 16f * d * pulse, p)
@@ -22509,7 +22107,7 @@ fun WorldMapScreen(close: () -> Unit) {
     val prof = remember { GameSession.ui("profile") }
     val marks = remember {
         val ar = GameSession.ui("areas")
-        mapMarks(w, GameSession.ui("quests")) + baseMarks(GameSession.ui("bases")) + titanMark(ar) + merchantMarks(ar)
+        mapMarks(w, GameSession.ui("quests")) + baseMarks(GameSession.ui("bases")) + merchantMarks(ar)
     }
     androidx.compose.runtime.LaunchedEffect(Unit) { com.zenvex.online.Bases.refresh() }
     // bölge haritası henüz çiziliyorsa hazır olunca hemen gösterilir (açılış anındaki değere takılı kalmaz)
@@ -22519,13 +22117,6 @@ fun WorldMapScreen(close: () -> Unit) {
     WorldMapView(img, fog, w, hud[Native.PX], hud[Native.PY], prof.optInt("level", 1), marks, close, region = region)
 }
 
-/** V12.1: Titan her 15 dakikada başka bir bölgede; bu dilimde öldürülmediyse yeri ve kalan süresi */
-fun titanMark(areas: JSONObject): List<MapMark> {
-    val t = areas.optJSONObject("titan") ?: return emptyList()
-    if (t.optBoolean("dead")) return emptyList()
-    val left = t.optDouble("left").toInt()
-    return listOf(MapMark(t.optDouble("x").toFloat(), t.optDouble("y").toFloat(), 2, "Titan", "${left / 60}:${"%02d".format(left % 60)} Sonra Başka Bölgeye Geçer"))
-}
 
 /** V12.2 gezgin tüccar Marco'nun kamyoneti (park ettiyse alışveriş açık) */
 fun merchantMarks(areas: JSONObject): List<MapMark> {
@@ -22759,8 +22350,8 @@ private fun DrawScope.drawMarkLabels(marks: List<MapMark>, at: (Float, Float) ->
     paint.textSize = 11f * d
     val placed = ArrayList<androidx.compose.ui.geometry.Rect>()
     drawIntoCanvas { cv ->
-        for (m in marks.sortedBy { when (it.kind) { MK_TITAN -> 0; MK_NPC -> 1; MK_PLACE -> 2; MK_MERCHANT -> 3; else -> 9 } }) {
-            if (m.kind != MK_TITAN && m.kind != MK_NPC && m.kind != MK_PLACE && m.kind != MK_MERCHANT) continue
+        for (m in marks.sortedBy { when (it.kind) { MK_NPC -> 1; MK_PLACE -> 2; MK_MERCHANT -> 3; else -> 9 } }) {
+            if (m.kind != MK_NPC && m.kind != MK_PLACE && m.kind != MK_MERCHANT) continue
             val text = m.label.ifEmpty { continue }
             val p = at(m.x, m.y)
             if (p.x < -60f || p.y < -20f || p.x > size.width + 60f || p.y > size.height + 20f) continue
@@ -22781,7 +22372,7 @@ private fun DrawScope.drawMarkLabels(marks: List<MapMark>, at: (Float, Float) ->
 private fun MapLegend(marks: List<MapMark>, open: Boolean, t: Float, modifier: Modifier, toggle: () -> Unit) {
     val rows = listOf(
         Triple(-1, "Sen", 1), Triple(MK_QUEST, "Görev Hedefi", marks.count { it.kind == MK_QUEST }),
-        Triple(MK_TITAN, "Titan", marks.count { it.kind == MK_TITAN }), Triple(MK_MERCHANT, "Gezgin Tüccar", marks.count { it.kind == MK_MERCHANT }),
+        Triple(MK_MERCHANT, "Gezgin Tüccar", marks.count { it.kind == MK_MERCHANT }),
         Triple(MK_NPC, "Karakter", marks.count { it.kind == MK_NPC }),
         Triple(MK_PLACE, "Önemli Yer", marks.count { it.kind == MK_PLACE }),
     )

@@ -1126,315 +1126,66 @@ pub mod bases {
     }
 }
 pub mod chests {
-    //! Sandıklar: kişisel üsse kurulan kalıcı depolar (kayıtta konum + içerik).
-    #[allow(unused_imports)]
-    use crate::Hyp;
-    use crate::data::{ItemKind, ITEMS};
-    use crate::game::Game;
+    //! V22: kişisel üs depo sandıkları kaldırıldı. Eski kayıtlardaki kurulu sandıkların içeriği yüklemede çantaya,
+    //! sığmayan kısmı altın olarak iade edilir; sandık eşyasının karşılığı da altın olarak verilir.
+    use crate::data::ITEMS;
     use crate::inventory::{self, Slot, POCKETS};
     use crate::progress::Progress;
-    use serde::{Deserialize, Serialize};
-    use serde_json::{json, Value};
+    use serde::Deserialize;
 
-    /// Sandığa erişim mesafesi (px)
-    pub const CHEST_NEAR: f32 = 130.0;
-    /// İki sandık arası en az mesafe (px)
-    const CHEST_GAP: f32 = 70.0;
-    pub const MAX_CHESTS: usize = 12;
-
-    #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+    /// Eski kayıttaki kurulu sandık (yalnız okunur, yeniden yazılmaz)
+    #[derive(Clone, Debug, Default, Deserialize)]
     #[serde(default)]
-    pub struct Chest {
+    pub struct LegacyChest {
         /// sandık eşyasının dizini (chest_wood / chest_iron / chest_military)
         pub item: u16,
-        pub x: f32,
-        pub y: f32,
         pub slots: Vec<Option<Slot>>,
     }
 
-    impl Chest {
-        pub fn cap(&self) -> usize {
-            ITEMS.get(self.item as usize).map_or(16, |d| d.armor as usize)
-        }
-        pub fn used(&self) -> usize {
-            self.slots.iter().filter(|s| s.is_some()).count()
-        }
-    }
-
     impl Progress {
-        /// Envanterdeki sandık eşyasını (x, y) konumuna kurar. (Üs kontrolü Game::place_chest'te.)
-        pub fn place_chest(&mut self, slot: usize, x: f32, y: f32) -> Result<usize, &'static str> {
-            let s = self.inv.slots.get(slot).copied().flatten().ok_or("Boş slot")?;
-            if ITEMS[s.item as usize].kind != ItemKind::Chest {
-                return Err("Bu eşya sandık değil");
-            }
-            if self.chests.len() >= MAX_CHESTS {
-                return Err("Üssüne en fazla 12 sandık kurabilirsin");
-            }
-            if self.chests.iter().any(|c| (c.x - x).hyp(c.y - y) < CHEST_GAP) {
-                return Err("Burada başka bir sandık var");
-            }
-            self.inv.take_n(slot, Some(1));
-            let mut c = Chest { item: s.item, x, y, slots: Vec::new() };
-            c.slots = vec![None; c.cap()];
-            self.chests.push(c);
-            Ok(self.chests.len() - 1)
-        }
-
-        /// Boş sandığı söküp çantaya geri alır.
-        pub fn pickup_chest(&mut self, i: usize) -> Result<&'static str, &'static str> {
-            let c = self.chests.get(i).ok_or("Sandık yok")?;
-            if c.used() > 0 {
-                return Err("Önce sandığı boşalt");
-            }
-            if !self.inv.can_fit(c.item as usize, 1) {
-                return Err("Çantada yer yok");
-            }
-            let c = self.chests.remove(i);
-            self.inv.add(c.item as usize, 1);
-            Ok(ITEMS[c.item as usize].name)
-        }
-
-        /// Çanta slotundan sandığa koyar (n = None → tamamı). Konan miktarı döndürür.
-        pub fn chest_put(&mut self, i: usize, slot: usize, n: Option<u32>) -> Result<u32, &'static str> {
-            let c = self.chests.get_mut(i).ok_or("Sandık yok")?;
-            let s = self.inv.slots.get(slot).copied().flatten().ok_or("Boş slot")?;
-            let want = n.unwrap_or(s.count as u32).clamp(1, s.count as u32);
-            let left = inventory::put_slot(&mut c.slots, Slot { count: want as u16, ..s });
-            let put = want - left;
-            if put == 0 {
-                return Err("Sandık dolu");
-            }
-            self.inv.take_n(slot, Some(put));
-            Ok(put)
-        }
-
-        /// Sandık slotundan çantaya alır (n = None → tamamı). Alınan miktarı döndürür.
-        pub fn chest_take(&mut self, i: usize, cslot: usize, n: Option<u32>) -> Result<u32, &'static str> {
-            let c = self.chests.get(i).ok_or("Sandık yok")?;
-            let s = c.slots.get(cslot).copied().flatten().ok_or("Boş slot")?;
-            let want = n.unwrap_or(s.count as u32).clamp(1, s.count as u32);
-            let left = self.inv.put(Slot { count: want as u16, ..s });
-            let took = want - left;
-            if took == 0 {
-                return Err("Çantada yer yok");
-            }
-            inventory::take_from(&mut self.chests[i].slots, cslot, Some(took));
-            Ok(took)
-        }
-
-        /// Hepsini koy (ceplere dokunmaz) / hepsini al. Taşınan yığın sayısını döndürür.
-        pub fn chest_all(&mut self, i: usize, put: bool) -> Result<usize, &'static str> {
-            if i >= self.chests.len() {
-                return Err("Sandık yok");
-            }
-            let mut moved = 0;
-            if put {
-                for slot in POCKETS..self.inv.slots.len() {
-                    if self.inv.slots[slot].is_some() && self.chest_put(i, slot, None).is_ok() {
-                        moved += 1;
-                    }
+        /// Eski kayıttaki sandıkları boşaltır: içerik çantaya, sığmayan eşya ve sandığın kendisi altına döner.
+        /// Verilen altın döner.
+        pub fn dissolve_chests(&mut self) -> u32 {
+            let mut gold = 0u32;
+            for ch in std::mem::take(&mut self.chests) {
+                if let Some(d) = ITEMS.get(ch.item as usize) {
+                    gold = gold.saturating_add(crate::data::retired_refund(d.id));
                 }
-            } else {
-                for cs in 0..self.chests[i].slots.len() {
-                    if self.chests[i].slots[cs].is_some() && self.chest_take(i, cs, None).is_ok() {
-                        moved += 1;
+                for s in ch.slots.into_iter().flatten() {
+                    let from = POCKETS.min(self.inv.slots.len());
+                    let left = inventory::stack_into(&mut self.inv.slots[from..], s.item as usize, s.count as u32);
+                    if left > 0 {
+                        gold = gold.saturating_add(ITEMS.get(s.item as usize).map_or(0, |d| d.value).saturating_mul(left));
                     }
                 }
             }
-            if moved == 0 {
-                return Err(if put { "Konacak eşya yok ya da sandık dolu" } else { "Alınacak eşya yok ya da çanta dolu" });
-            }
-            Ok(moved)
-        }
-
-        /// Sandık içinde sürükle-bırak (yer değiştir / birleştir).
-        pub fn chest_move(&mut self, i: usize, from: usize, to: usize) -> Result<(), &'static str> {
-            let c = self.chests.get_mut(i).ok_or("Sandık yok")?;
-            let n = c.slots.len();
-            if from >= n || to >= n {
-                return Err("Geçersiz slot");
-            }
-            let a = c.slots[from].ok_or("Boş slot")?;
-            match c.slots[to] {
-                Some(b) if b.item == a.item => {
-                    let stack = ITEMS[a.item as usize].stack.max(1);
-                    let put = stack.saturating_sub(b.count).min(a.count);
-                    c.slots[to] = Some(Slot { count: b.count + put, ..b });
-                    c.slots[from] = if a.count > put { Some(Slot { count: a.count - put, ..a }) } else { None };
-                }
-                _ => c.slots.swap(from, to),
-            }
-            Ok(())
-        }
-    }
-
-    fn slots_json(slots: &[Option<Slot>]) -> Vec<Value> {
-        slots
-            .iter()
-            .map(|s| match s {
-                Some(s) => {
-                    let d = &ITEMS[s.item as usize];
-                    let mut v = json!({ "i": s.item, "id": d.id, "name": d.name, "kind": d.kind, "rarity": d.rarity as u8, "desc": d.desc,
-                            "armor": d.armor, "bonus": d.bonus, "value": d.value, "count": s.count });
-                    if crate::inventory::durable(s.item as usize) {
-                        v["dur"] = json!((s.dur as f32 / 10.0).round() as i32);
-                    }
-                    v
-                }
-                None => Value::Null,
-            })
-            .collect()
-    }
-
-    impl Game {
-        /// En yakın erişilebilir sandık
-        pub fn near_chest(&self) -> Option<usize> {
-            let (px, py) = (self.player.x, self.player.y);
-            self.progress
-                .chests
-                .iter()
-                .enumerate()
-                .map(|(i, c)| (i, (c.x - px).hyp(c.y - py)))
-                .filter(|&(_, d)| d < CHEST_NEAR)
-                .min_by(|a, b| a.1.total_cmp(&b.1))
-                .map(|(i, _)| i)
-        }
-
-        /// Sandığı oyuncunun önüne kurar (yalnız kişisel üste).
-        pub fn place_chest(&mut self, slot: usize) -> Result<String, String> {
-            if !self.at_home() {
-                return Err("Sandığı yalnız kişisel üssüne kurabilirsin (Büyücü seni oraya ışınlar)".into());
-            }
-            let (x, y) = (self.player.x, self.player.y + 40.0);
-            let i = self.progress.place_chest(slot, x, y)?;
-            Ok(format!("{} kuruldu", ITEMS[self.progress.chests[i].item as usize].name))
-        }
-
-        fn chest_reach(&self, i: usize) -> Result<(), String> {
-            let c = self.progress.chests.get(i).ok_or("Sandık yok")?;
-            if (c.x - self.player.x).hyp(c.y - self.player.y) > CHEST_NEAR * 1.5 {
-                return Err("Sandığa çok uzaksın".into());
-            }
-            Ok(())
-        }
-
-        /// Sandık komutları (ui.rs command() buraya yönlendirir); bilinmeyen komutta None.
-        pub fn chest_command(&mut self, cmd: &str, v: &Value) -> Option<Result<String, String>> {
-            let int = |k: &str| v[k].as_u64().unwrap_or(0) as usize;
-            let n = v["n"].as_u64().map(|n| n as u32);
-            let ci = int("chest");
-            let r = match cmd {
-                "place_chest" => self.place_chest(int("slot")),
-                "pickup_chest" => self.chest_reach(ci).and_then(|_| {
-                    self.progress.pickup_chest(ci).map(|n| format!("{n} çantaya alındı")).map_err(String::from)
-                }),
-                "chest_put" => self.chest_reach(ci).and_then(|_| self.progress.chest_put(ci, int("slot"), n).map(|_| String::new()).map_err(String::from)),
-                "chest_take" => self.chest_reach(ci).and_then(|_| self.progress.chest_take(ci, int("cslot"), n).map(|_| String::new()).map_err(String::from)),
-                "chest_all" => self.chest_reach(ci).and_then(|_| {
-                    let put = v["put"].as_bool().unwrap_or(true);
-                    self.progress
-                        .chest_all(ci, put)
-                        .map(|k| format!("{k} yığın {}", if put { "sandığa kondu" } else { "çantaya alındı" }))
-                        .map_err(String::from)
-                }),
-                "chest_move" => self.chest_reach(ci).and_then(|_| self.progress.chest_move(ci, int("from"), int("to")).map(|_| String::new()).map_err(String::from)),
-                _ => return None,
-            };
-            if r.is_ok() && matches!(cmd, "chest_put" | "chest_take" | "chest_all") {
-                self.play_pose(crate::game::A_OPEN, 0.7);
-            }
-            Some(r)
-        }
-
-        /// "chests": kurulu sandıklar (çizim) + yakındaki; "chest:i": tek sandığın içeriği
-        pub fn chests_json(&self, kind: &str) -> Option<Value> {
-            if kind == "chests" {
-                let list: Vec<Value> = self
-                    .progress
-                    .chests
-                    .iter()
-                    .enumerate()
-                    .map(|(i, c)| json!({ "i": i, "id": ITEMS[c.item as usize].id, "x": c.x, "y": c.y, "used": c.used(), "cap": c.cap() }))
-                    .collect();
-                return Some(json!({ "list": list, "near": self.near_chest().map_or(-1, |i| i as i64), "home": self.at_home() }));
-            }
-            let i: usize = kind.strip_prefix("chest:")?.parse().ok()?;
-            let c = self.progress.chests.get(i)?;
-            let d = &ITEMS[c.item as usize];
-            Some(json!({ "i": i, "id": d.id, "name": d.name, "cap": c.cap(), "used": c.used(), "slots": slots_json(&c.slots) }))
+            self.gold = self.gold.saturating_add(gold);
+            gold
         }
     }
 
     #[cfg(test)]
     mod tests {
-        #[allow(unused_imports)]
-        use crate::Hyp;
-        use super::*;
-        use crate::data;
-
-        fn with_chest(p: &mut Progress, id: &str) -> usize {
-            p.inv.add_id(id, 1);
-            let slot = p.inv.slots.iter().position(|s| s.is_some_and(|s| ITEMS[s.item as usize].id == id)).unwrap();
-            p.place_chest(slot, 100.0, 100.0).unwrap()
-        }
+        use crate::inventory::Slot;
+        use crate::progress::Progress;
 
         #[test]
-        fn chest_place_transfer_pickup() {
+        fn old_chests_return_to_bag_and_gold() {
             let mut p = Progress::default();
-            let ci = with_chest(&mut p, "chest_wood");
-            assert_eq!(p.chests[ci].cap(), 16);
-            assert_eq!(p.inv.count_id("chest_wood"), 0);
-            // aynı yere ikinci sandık kurulamaz
-            p.inv.add_id("chest_iron", 1);
-            let s2 = p.inv.slots.iter().position(|s| s.is_some_and(|s| ITEMS[s.item as usize].id == "chest_iron")).unwrap();
-            assert!(p.place_chest(s2, 110.0, 100.0).is_err());
-            // kısmi koy, tamamını al
-            p.inv.add_id("wood", 30);
-            let w = p.inv.slots.iter().position(|s| s.is_some_and(|s| ITEMS[s.item as usize].id == "wood")).unwrap();
-            assert_eq!(p.chest_put(ci, w, Some(12)).unwrap(), 12);
-            assert_eq!(p.inv.count_id("wood"), 18);
-            assert!(p.pickup_chest(ci).is_err()); // dolu sandık sökülmez
-            let cs = p.chests[ci].slots.iter().position(|s| s.is_some()).unwrap();
-            assert_eq!(p.chest_take(ci, cs, None).unwrap(), 12);
-            assert_eq!(p.inv.count_id("wood"), 30);
-            // hepsini koy: cepler kalır
-            p.inv.add_id("potion_heal", 2);
-            let pot = p.inv.slots.iter().position(|s| s.is_some_and(|s| ITEMS[s.item as usize].id == "potion_heal")).unwrap();
-            p.inv.move_slot(pot, 0).unwrap();
-            p.chest_all(ci, true).unwrap();
-            assert_eq!(p.inv.count_id("potion_heal"), 2);
-            assert_eq!(p.inv.count_id("wood"), 0);
-            assert!(p.chests[ci].used() > 0);
-            p.chest_all(ci, false).unwrap();
-            assert_eq!(p.chests[ci].used(), 0);
-            assert_eq!(p.pickup_chest(ci).unwrap(), "Ahşap Sandık");
+            let wood = crate::data::item_index("wood").unwrap() as u16;
+            let chest = crate::data::item_index("chest_iron").unwrap() as u16;
+            let before = p.inv.count_id("wood");
+            p.chests.push(super::LegacyChest { item: chest, slots: vec![Some(Slot { item: wood, count: 12, dur: 1000 }), None] });
+            let gold0 = p.gold;
+            let paid = p.dissolve_chests();
             assert!(p.chests.is_empty());
-            assert_eq!(p.inv.count_id("chest_wood"), 1);
-            // kayıttan geri yükleme
-            let ci = with_chest(&mut p, "chest_military");
-            let s = serde_json::to_string(&p).unwrap();
-            let q: Progress = serde_json::from_str(&s).unwrap();
-            assert_eq!(q.chests[ci].cap(), 32);
-            assert_eq!(q.chests[ci].x, 100.0);
-            let _ = data::item_index("wood");
-        }
-
-        #[test]
-        fn chest_needs_home() {
-            let mut g = Game::new(7, Progress::default(), 0);
-            g.progress.inv.add_id("chest_wood", 1);
-            let slot = g.progress.inv.slots.iter().position(|s| s.is_some_and(|s| ITEMS[s.item as usize].id == "chest_wood")).unwrap();
-            // kampta (üs dışında) kurulamaz
-            if !g.at_home() {
-                assert!(g.place_chest(slot).is_err());
-                assert_eq!(g.progress.inv.count_id("chest_wood"), 1);
-            }
-            assert!(g.chests_json("chests").is_some());
-            assert!(g.chests_json("chest:0").is_none());
+            assert_eq!(p.inv.count_id("wood"), before + 12);
+            assert_eq!(p.gold, gold0 + paid);
+            assert!(paid >= crate::data::retired_refund("chest_iron"));
         }
     }
 }
+
 pub mod data {
     //! Oyun verileri: eşyalar, silahlar, zırhlar, zombiler, tarifler, karakterler, araçlar, görevler, pass.
     //! Tek kaynak burasıdır; Kotlin arayüzü bu verileri JSON olarak alır.
@@ -1534,7 +1285,7 @@ pub mod data {
         item!("tooth", "Zombi Dişi", Material, Common, 50, 3, "Zombilerden düşer."),
         item!("toxic", "Toksik Öz", Material, Rare, 50, 12, "Toksik zombilerden düşer. Panzehir yapımında kullanılır."),
         item!("dark_crystal", "Karanlık Kristal", Material, Epic, 50, 40, "Karanlık zombilerden nadiren düşer. Katana, Titan zırhı ve Karanlık Kolye yapımında kullanılır."),
-        item!("titan_shard", "Titan Parçası", Material, Legendary, 50, 120, "Yalnız Titan'dan düşer. Titan zırhı ve Karanlık Yüzük yapımında kullanılır."),
+        item!("titan_shard", "Titan Parçası", Material, Legendary, 50, 120, "Sezon bileti ve devlet üssü ödüllerinden gelir. Titan zırhı ve Karanlık Yüzük yapımında kullanılır."),
         item!("fuel", "Benzin", Material, Common, 10, 10, "Araçların yakıtı; aracın yanında kullanınca depoyu doldurur. Motor yapımında da kullanılır."),
         // tüketilebilir (15-19)  bonus = can
         item!("bandage", "Bandaj", Consumable, Common, 10, 8, "Kullanınca hemen 25 can verir.", 0.0, 25.0),
@@ -1691,7 +1442,7 @@ pub mod data {
             "swamp_moss" | "toxic" | "bog_iron" => "Kara Bataklık (zombiler, sandıklar)",
             "frozen_fish" | "ice_shard" | "dark_crystal" => "Donmuş Liman (zombiler, sandıklar)",
             "powder_pouch" | "circuit_board" => "Cephe Hattı (askerler, üs sandıkları)",
-            "titan_shard" => "Titan (her 15 dakikada başka bir bölgede uyanır)",
+            "titan_shard" => "Sezon bileti, devlet üssü ödülleri",
             "bandage" | "energy" | "food" => "Sandıklar, tüccar",
             "medkit" => "Tezgâh, sandıklar, tüccar",
             "v_wheel" | "v_engine" | "v_frame_moto" | "v_frame_car" => "Tezgâh (Araç sekmesi)",
@@ -1729,7 +1480,9 @@ pub mod data {
         // etkinlik kaskları yerine etkinlik silahları geldi (elde olanlar süresi dolana dek çalışır)
         "ev_blood_helm", "ev_titan_helm", "ev_base_helm", "ev_scrap_helm", "ev_pack_helm", "ev_breath_helm",
         // V17: El Baltası kalktı (Taş Balta ile karışıyordu); elde olan bıçağa döner (RETIRE_INTO)
-        "w_hatchet"];
+        "w_hatchet",
+        // V22: Karakter Kartı eşyası ve kişisel üs depo sandıkları kalktı (kartlar sandıklardan gelmeye devam eder)
+        "char_card", "chest_wood", "chest_iron", "chest_military"];
 
     /// V15: oyundan kalkan eşyanın altın karşılığı (değerinin 2 katı; değeri olmayan etkinlik kaskı ve pelerin sabit)
     pub fn retired_refund(id: &str) -> u32 {
@@ -2229,7 +1982,7 @@ pub mod data {
 
     /// V17: bölge başına iki imza yaratık kalır (oyuncu her bölgede az ama akılda kalan düşman görür); kalkanlar artık
     /// doğmaz, kayıt/ağ biçimi bozulmasın diye tabloda durur
-    pub const RETIRED_SPECIES: &[&str] = &["shroom", "crawler", "ashwraith", "biker", "witch", "dockbrute"];
+    pub const RETIRED_SPECIES: &[&str] = &["shroom", "crawler", "ashwraith", "biker", "witch", "dockbrute", "scorpion"];
 
     /// Tür hâlâ doğuyor mu
     pub fn species_active(s: &Species) -> bool {
@@ -2458,9 +2211,6 @@ pub mod data {
         r!("v_frame_moto", 1, [("scrap", 12), ("gear", 1), ("leather", 2)], true),
         r!("v_frame_car", 1, [("scrap", 30), ("gear", 3), ("battery", 1), ("bog_iron", 2)], true),
         // ---- tezgâh: üs
-        r!("chest_wood", 1, [("wood", 30), ("rope", 2)], true),
-        r!("chest_iron", 1, [("scrap", 16), ("wood", 10), ("bog_iron", 2)], true),
-        r!("chest_military", 1, [("scrap", 20), ("rusty_key", 1), ("circuit_board", 1)], true),
     ];
 
     /// Bölgeye özel malzemeler (zombi ve sandık ganimeti; ağırlık): her bölgeden yalnız kendi eşyaları çıkar.
@@ -2800,15 +2550,6 @@ pub mod data {
             xp: 1200,
             pass_xp: 500,
         },
-        QuestDef {
-            id: "m8",
-            title: "Efsane: Titan'ı yen",
-            kind: QuestKind::Boss,
-            goal: 1,
-            gold: 3000,
-            xp: 5000,
-            pass_xp: 2000,
-        },
     ];
 
     pub const DAILY_POOL: &[QuestDef] = &[
@@ -2913,39 +2654,39 @@ pub mod data {
     pub const PASS_PREMIUM_XP: u32 = 10_000;
 
     /// (kademe, ücretsiz ödül, premium ödül) — ödül biçimi: "eşya:adet" | "gold:n" | "gem:n" | "cos:kozmetik"
-    /// Elmas ödülleri sunucudan onaylanır (supabase _zx_pass_gems ile aynı tablo). Ücretsiz yol 150, premium 900 elmas;
-    /// premium yolda 30 karakter kartı, 25'te Kanlı Ay Kılıcı görünümü, 30'da Sezon 1 Kanatları.
+    /// Elmas ödülleri sunucudan onaylanır (supabase _zx_pass_gems ile aynı tablo). Ücretsiz yol 360, premium 1.610 elmas
+    /// (V22: Karakter Kartı ve depo sandığı ödülleri elmasa döndü); 25'te Kanlı Ay Kılıcı görünümü.
     pub const PASS_REWARDS: &[(u32, &str, &str)] = &[
-        (1, "gold:500", "char_card:4"),
-        (2, "bandage:5", "char_card:3"),
+        (1, "gold:500", "gem:40"),
+        (2, "bandage:5", "gem:30"),
         (3, "food:5", "gem:40"),
-        (4, "char_card:1", "potion_heal:5"),
-        (5, "gem:15", "chest_iron:2"),
-        (6, "gold:1000", "char_card:3"),
+        (4, "gem:10", "potion_heal:5"),
+        (5, "gem:15", "gem:30"),
+        (6, "gold:1000", "gem:30"),
         (7, "medkit:3", "gem:60"),
-        (8, "char_card:1", "potion_speed:5"),
-        (9, "gold:1500", "char_card:4"),
-        (10, "gem:25", "chest_military:1"),
+        (8, "gem:10", "potion_speed:5"),
+        (9, "gold:1500", "gem:40"),
+        (10, "gem:25", "gem:30"),
         (11, "potion_heal:3", "gem:80"),
-        (12, "char_card:1", "potion_power:5"),
-        (13, "gold:2000", "char_card:4"),
+        (12, "gem:10", "potion_power:5"),
+        (13, "gold:2000", "gem:40"),
         (14, "medkit:5", "gem:90"),
-        (15, "gem:30", "chest_military:2"),
-        (16, "char_card:2", "titan_shard:2"),
+        (15, "gem:30", "gem:60"),
+        (16, "gem:20", "titan_shard:2"),
         (17, "gold:2500", "gem:100"),
-        (18, "potion_speed:3", "char_card:4"),
-        (19, "char_card:2", "cos:camo_s1"),
-        (20, "gem:35", "chest_military:3"),
+        (18, "potion_speed:3", "gem:40"),
+        (19, "gem:20", "cos:camo_s1"),
+        (20, "gem:35", "gem:90"),
         (21, "gold:3000", "gem:120"),
-        (22, "potion_power:3", "char_card:4"),
-        (23, "char_card:2", "titan_shard:3"),
+        (22, "potion_power:3", "gem:40"),
+        (23, "gem:20", "titan_shard:3"),
         (24, "gold:3500", "gem:130"),
         (25, "gem:45", "cos:skin_w_bloodmoon"),
-        (26, "titan_shard:2", "char_card:4"),
+        (26, "titan_shard:2", "gem:40"),
         (27, "gold:4000", "gem:140"),
-        (28, "char_card:3", "ring_titan:1"),
+        (28, "gem:30", "ring_titan:1"),
         (29, "medkit:5", "gem:140"),
-        (30, "chest_military:3", "gem:200"),
+        (30, "gem:90", "gem:200"),
     ];
 
     /// Haftalık havuz: her hafta 4 tanesi seçilir.
@@ -2957,13 +2698,11 @@ pub mod data {
         QuestDef { id: "w_base", title: "2 Devlet Üssü Ele Geçir", kind: QuestKind::BaseCap, goal: 2, gold: 1500, xp: 2500, pass_xp: 2000 },
         QuestDef { id: "w_crate", title: "30 Sandık Aç", kind: QuestKind::Crate, goal: 30, gold: 700, xp: 1200, pass_xp: 1000 },
         QuestDef { id: "w_craft", title: "25 Eşya Üret", kind: QuestKind::Craft, goal: 25, gold: 700, xp: 1200, pass_xp: 1000 },
-        QuestDef { id: "w_titan", title: "1 Titan Yen", kind: QuestKind::KillType(7), goal: 1, gold: 2000, xp: 3000, pass_xp: 2000 },
     ];
 
     /// Sezon görevleri: sezon boyunca hepsi açık.
     pub const SEASON_QUESTS: &[QuestDef] = &[
         QuestDef { id: "s_kill", title: "3.000 Zombi Öldür", kind: QuestKind::Kill, goal: 3000, gold: 3000, xp: 8000, pass_xp: 4000 },
-        QuestDef { id: "s_titan", title: "10 Titan Yen", kind: QuestKind::KillType(7), goal: 10, gold: 3000, xp: 10000, pass_xp: 5000 },
         QuestDef { id: "s_base", title: "15 Devlet Üssü Ele Geçir", kind: QuestKind::BaseCap, goal: 15, gold: 3000, xp: 9000, pass_xp: 5000 },
         QuestDef { id: "s_soldier", title: "300 Asker Etkisiz Bırak", kind: QuestKind::Soldier, goal: 300, gold: 3000, xp: 9000, pass_xp: 4000 },
         QuestDef { id: "s_craft", title: "200 Eşya Üret", kind: QuestKind::Craft, goal: 200, gold: 3000, xp: 6000, pass_xp: 3000 },
@@ -3195,9 +2934,6 @@ pub mod game {
     pub const Z_ATTACK: u8 = 2;
     pub const Z_HURT: u8 = 3;
     pub const Z_DEATH: u8 = 4;
-    /// V13 Magma Titan: iki elle yere vurma ve ateş püskürtme
-    pub const Z_SLAM: u8 = 5;
-    pub const Z_BREATH: u8 = 6;
 
     // ---- çizim listesi
     pub const STRIDE: usize = 12;
@@ -3308,11 +3044,6 @@ pub mod game {
         ToxicCloud { x: f32, y: f32 },
         #[serde(rename = "slam")]
         Slam { x: f32, y: f32, r: f32 },
-        /// V13 Magma Titan saldırı efekti: a = 0 pençe, 1 yere vurma, 2 ateş püskürtme (tx, ty: hedef)
-        #[serde(rename = "magma")]
-        Magma { x: f32, y: f32, a: u8, tx: f32, ty: f32 },
-        #[serde(rename = "boss")]
-        Boss { name: String },
         #[serde(rename = "quest")]
         Quest { title: String },
         #[serde(rename = "zone")]
@@ -3555,7 +3286,6 @@ pub mod game {
         PoisonCloud = 1,
         Heal = 2,
         ShieldFx = 3,
-        Shockwave = 4,
         Explosion = 5,
     }
 
@@ -3658,10 +3388,6 @@ pub mod game {
         pub events: Vec<Event>,
         pub time: f32,
         pub day_t: f32,
-        pub boss_t: f32,
-        /// V12.1 Titan: (dilim, bölge, x, y) ve bu dilimde öldürüldü mü
-        pub titan: (i64, usize, f32, f32),
-        pub titan_dead: bool,
         /// "seviyene uygun zombi avla" uyarısının son gösterildiği an (dakikada en çok bir kez)
         pub xp_warn_t: f32,
         pub textures: Textures,
@@ -3705,6 +3431,8 @@ pub mod game {
             progress.story.migrate();
             progress.relayout_inv();
             progress.ensure_dailies(day_index);
+            // V22: depo sandıkları kalktı: içerik çantaya / altına
+            progress.dissolve_chests();
             // V12.1: oyundan kalkan ara malzemeler karşılığına dönüşür
             progress.retire_items();
             // V18: VIP kalktı; kanatlar yalnız yöneticinin taktığıdır
@@ -3842,7 +3570,6 @@ pub mod game {
                 events: Vec::new(),
                 time: 0.0,
                 day_t: 0.3,
-                boss_t: 5.0,
                 textures: Textures::default(),
                 rng: Rng::new(seed ^ 0x5EED),
                 scratch: Vec::new(),
@@ -3862,8 +3589,6 @@ pub mod game {
                 wiz_cd: 0.0,
                 temp_benches: Vec::new(),
                 caravans,
-                titan: (i64::MIN, 0, 0.0, 0.0),
-                titan_dead: false,
                 xp_warn_t: -999.0,
                 train: 0,
                 train_t: 0.0,
@@ -6109,9 +5834,6 @@ pub mod progress {
         /// V20 araç yuvası: takılan araç eşyası ("veh_moto" / "veh_car"; boş = yok). Çantadaki tuşla binilir.
         #[serde(default)]
         pub veh_eq: String,
-        /// Titan'ın öldürüldüğü son zaman dilimi (yeniden girince aynı dilimde yeniden doğmasın)
-        #[serde(default = "no_slot")]
-        pub titan_killed: i64,
         /// kendi araçlarının canı [motosiklet, araba] (in/bin, oyundan çık/gir canı yenilemez); 0 = patladı
         #[serde(default = "veh_hp_full")]
         pub veh_hp: [f32; 2],
@@ -6148,8 +5870,9 @@ pub mod progress {
         pub fog: Vec<u64>,
         /// rehber ve görevci zincirleri
         pub story: crate::story::StoryState,
-        /// V8: kişisel üsse kurulan sandıklar
-        pub chests: Vec<crate::chests::Chest>,
+        /// V22: eski kayıtlardaki kurulu sandıklar; yüklemede boşaltılır (dissolve_chests), kayda yeniden yazılmaz
+        #[serde(skip_serializing)]
+        pub chests: Vec<crate::chests::LegacyChest>,
         /// V8: ölünce kişisel üste doğ (büyücüden seçilir)
         pub home_spawn: bool,
         /// V12.1: kişisel üste kurulan kalıcı tezgâhlar (dünya pikseli)
@@ -6308,7 +6031,6 @@ pub mod progress {
                 wings: String::new(),
                 wings_grant: String::new(),
                 veh_eq: String::new(),
-                titan_killed: i64::MIN,
                 veh_hp: veh_hp_full(),
                 veh_ready: [0.0; 2],
                 veh_wear: [0.0; 2],
@@ -6509,16 +6231,9 @@ pub mod progress {
                     lost.push((item, left));
                 }
             }
-            for ch in self.chests.iter_mut() {
-                for (item, c) in fix(&mut ch.slots) {
-                    crate::inventory::stack_into(&mut ch.slots, item, c);
-                }
-            }
-            // çantaya sığmayan dönüşüm ilk sandığa (yoksa kaybolmaz: bir sonraki yerde açılan yere eklenir)
+            // çantaya sığmayan dönüşüm altına döner
             for (item, c) in lost {
-                if let Some(ch) = self.chests.first_mut() {
-                    crate::inventory::stack_into(&mut ch.slots, item, c);
-                }
+                self.gold = self.gold.saturating_add(crate::data::ITEMS[item].value.saturating_mul(c));
             }
             n
         }
@@ -6541,9 +6256,6 @@ pub mod progress {
                 }
             };
             strip(&mut self.inv.slots);
-            for ch in self.chests.iter_mut() {
-                strip(&mut ch.slots);
-            }
             for slot in [&mut self.eq.weapon, &mut self.eq.helmet, &mut self.eq.cloak] {
                 if !slot.is_empty() && gone(slot) {
                     gold = gold.saturating_add(crate::data::retired_refund(slot));
@@ -6857,9 +6569,6 @@ pub mod progress {
         }
     }
 
-    fn no_slot() -> i64 {
-        i64::MIN
-    }
 
     fn veh_hp_full() -> [f32; 2] {
         [crate::data::VEHICLES[1].hp, crate::data::VEHICLES[2].hp]
@@ -7967,9 +7676,9 @@ pub mod story {
         // V11 şehir öğreticisi (Sv 10): şehrin güvenli bölgesindeki Komutan Diana
         q!("g8", N_COMMANDER, "Şehre Hoş Geldin", "Eski Arena'ya Git",
            ["Şehre hoş geldin asker. Ben Komutan Diana; bu surların ardında hayatta kalanları ben toplarım.",
-            "Şehir üç kuşaktır: banliyö, merkez ve sanayi. Kuzeydoğudaki eski arena artık boş; Titan her çeyrek saatte başka bir bölgede uyanıyor.",
-            "Eski Arena'ya kadar git, şehri tanı. Haritanda işaretledim. Titan'ın nerede olduğunu Aldric'in haritasında görürsün."],
-           "Şehri tanıdın. Titan büyük ganimet bırakır ama klansız gidene mezar olur.",
+            "Şehir üç kuşaktır: banliyö, merkez ve sanayi. Kuzeydoğudaki eski arena artık boş.",
+            "Eski Arena'ya kadar git, şehri tanı. Haritanda işaretledim."],
+           "Şehri tanıdın. Sanayinin derinliklerine klansız gidene mezar olur.",
            Goal::Reach("arena_post"), 1, 10, 150, 200, &[("medkit", 2)], &[]),
         q!("g9", N_COMMANDER, "Eğitim Üssü", "Eğitim Üssündeki Askerleri Yen Ve Üssü Ele Geçir",
            ["Asıl savaş Cephe Hattı'nda: devlet üsleri ve klanların kapıştığı yer. Oraya Büyücü Aldric götürür.",
@@ -8065,7 +7774,7 @@ pub mod story {
             "Viktor parçaları alır, 10 dakika sonra Motosiklet Anahtarı postana gelir. Anahtarı kullanınca motorun yanına gelir; sür ve zombileri geride bırak."],
            "Sipariş verildi! Postanı kontrol et; anahtar gelince çantandan kullan, motosiklete bin. Sürerken yakıt ve can çubuğuna dikkat.",
            Goal::Ping("order"), 1, 10, 200, 300, &[("fuel", 2)], &[]),
-        // V16: Sv 40'a kadar bölge zinciri: her bölgenin karakoluna git (Aldric götürür), bölgeyi avla; sonunda Titan
+        // V16: Sv 40'a kadar bölge zinciri: her bölgenin karakoluna git (Aldric götürür), bölgeyi avla; sonda Donmuş Liman
         q!("q10", N_QUEST, "Kül Karakolu'na Git", "Kül Karakolu'na Git",
            ["Şehrin doğusunda bir zamanlar ormandı; şimdi yalnız kül ve kor. Orada bir karakol kalmış.",
             "Büyücü Aldric seni oraya götürür. Karakola ulaş, güvende olduğunu bana bildir."],
@@ -8116,11 +7825,6 @@ pub mod story {
             "30 yaratığı temizle ve donmuş balık topla, sıcak yemek iyileştirir."],
            "Liman temiz! Sen artık bir efsanesin, evlat.",
            Goal::Kill(Some(Zone::Harbor)), 30, 40, 2000, 5000, &[("medkit", 5), ("potion_power", 3)], &[]),
-        q!("q20", N_QUEST, "Titan'ın Sonu", "Bir Titan'ı Yen",
-           ["Titan her çeyrek saatte bir bölgede uyanır; haritada nerede olduğunu Aldric gösterir.",
-            "Tek başına gidilmez. Klanınla git, ağır silah ve bol iksir al. Titan'ı yenersen senin adın destan olur."],
-           "TİTAN'I YENDİN! Duvarlar bunu yüzyıllarca anlatır. Ganimeti hak ettin.",
-           Goal::KillKind(ZKind::Titan), 1, 40, 5000, 10000, &[("titan_shard", 3)], &[]),
     ];
 
     const OLD_GUIDE_V2: [&str; 17] = ["g1", "g2", "g3", "g4", "g4b", "g4c", "g4a", "g4d", "g4e", "g4f", "g4g", "g5", "g6", "g6b", "g7", "g8", "g9"];
@@ -8930,7 +8634,7 @@ pub mod talk {
             "city" => vec![
                 "Yıkık Şehir'desin. Güneydeki surun dibinde güvenli meydan var: pazar, doktor, tamirci, eğitmen ve büyücü orada.",
                 "Kuzeye çıktıkça önce banliyö, sonra merkez, en tepede sanayi gelir. Her adımda zombiler biraz daha sertleşir.",
-                "Kuzeydoğu köşedeki eski arena boş. Titan artık her çeyrek saatte başka bir bölgede uyanıyor.",
+                "Kuzeydoğu köşedeki eski arena boş. Kimse oraya yaklaşmıyor artık.",
                 "Elektronik parça, dişli, pil, paslı anahtar ve altın saat en çok bu şehirden çıkar.",
             ],
             "burnt" => vec![
@@ -8998,7 +8702,7 @@ pub mod talk {
             ],
             (N_MERCHANT, "rumor") => pick(&[
                 &["Bir müşterim şehirde, eski bankanın kasasında asker sandıkları gördüğünü söyledi.", "Doğru mu bilmem; o adam bir kere de beni kandırmıştı."],
-                &["Bir yolcu, Titan'ın göğsünde ateş yandığını anlattı.", "Kalbi bir fırın gibiymiş. Ben görmek istemem."],
+                &["Bir yolcu, yanık ormanda dumanın hiç dinmediğini anlattı.", "Ateş hâlâ yeraltında yanıyormuş. Ben görmek istemem."],
                 &["Gizemli ağacın altında mantar toplayan bir kadın varmış.", "Kimse yüzünü görmemiş. Selamını alanlar zombi görmeden eve dönmüş."],
             ]),
             // ------------------------------------------------------------------ görevci
@@ -9016,7 +8720,7 @@ pub mod talk {
             ],
             (N_QUEST, "rumor") => pick(&[
                 &["Bataklıkta bir kurbağanın konuştuğunu duydum. Herhalde zehirli suyu içen biri uydurmuştur.", "Ama yine de… Kaynağı temizlersen öğreniriz."],
-                &["Şehrin kapısını kimin yıktığını herkes merak ediyor.", "Bence Titan değil; kapı içeriden açıldı. Biri bir şey saklıyor."],
+                &["Şehrin kapısını kimin yıktığını herkes merak ediyor.", "Bence kapı içeriden açıldı. Biri bir şey saklıyor."],
                 &["Geceleri ormanda bir ışık dolaşıyormuş.", "Fener mi, ruh mu, bilmiyorum. Bir gece sen de bak."],
             ]),
             // ------------------------------------------------------------------ doktor
@@ -9089,7 +8793,7 @@ pub mod talk {
             (N_WIZARD, "rumor") => pick(&[
                 &["Donmuş Liman'dan gelen bir tüccar, buz tutmuş konteynerlerin içinde ışık gördüğünü anlattı.", "Kim bilir, belki asker sandıklarıdır, belki de daha kötüsü."],
                 &["Yanık Orman hâlâ tütüyor. Ateşi kimin yaktığını bilen yok.", "Ama küllerin arasında koşan şeyler var; yalnız gitme."],
-                &["Titan tek yerde durmuyor. Her çeyrek saatte başka bir bölgede uyanıyor.", "Haritama bakarsan nerede olduğunu görürsün; kırmızı işaret onun."],
+                &["Haritam her bölgeyi gösterir: hangi yaratıklar yaşar, ne ganimet bırakırlar.", "Hazır olmadığın bir bölgeye ışınlanmak istemezsin."],
             ]),
             // ------------------------------------------------------------------ komutan
             (N_COMMANDER, "self") => vec![
@@ -9117,7 +8821,7 @@ pub mod talk {
             ],
             (_, "rumor") => pick(&[
                 &["Dün gece cephe tarafından bir helikopter sesi duydum.", "Kim uçurur bu zamanda? Bir bilen varsa söylesin."],
-                &["Titan'ın kükremesini kulede bile hissettim.", "Hazır olmadan peşine düşme."],
+                &["Gece limandan gelen sesleri kulede bile duydum.", "Hazır olmadan kuzeye gitme."],
             ]),
             _ => vec!["Bunu bilmiyorum, kusura bakma."],
         }
@@ -9608,10 +9312,10 @@ pub mod ui {
                         .map(|d| json!([d.id, d.name, format!("{:?}", d.kind), d.rarity as u8])).collect();
                     // yönetici paneli: güncel bölgeler (hub'a ışınlanma) ve yaratıklar (temel türler + bölge türleri)
                     let areas: Vec<Value> = crate::areas::AREAS.iter().map(|a| json!([a.id, a.name])).collect();
-                    let mut kinds: Vec<Value> = [("walker", data::ZKind::Walker), ("runner", data::ZKind::Runner), ("dog", data::ZKind::Dog),
-                        ("toxic", data::ZKind::Toxic), ("dark", data::ZKind::Dark), ("tank", data::ZKind::Tank), ("mystery", data::ZKind::Mystery)]
+                    // klasik görünüşü kalan türler (karanlık, tank) + doğan bölge türleri
+                    let mut kinds: Vec<Value> = [("dark", data::ZKind::Dark), ("tank", data::ZKind::Tank)]
                         .iter().map(|(id, k)| json!([id, data::ZOMBIES[*k as usize].name, ""])).collect();
-                    kinds.extend(data::SPECIES.iter().map(|sp| json!([sp.id, sp.name, sp.area])));
+                    kinds.extend(data::SPECIES.iter().filter(|sp| data::species_active(sp)).map(|sp| json!([sp.id, sp.name, sp.area])));
                     let here = crate::areas::AREAS[crate::areas::area_at(self.player.x, self.player.y)].name;
                     json!({ "god": self.player.god, "onehit": self.player.one_hit, "speed": self.player.speed_cheat, "areas": areas, "kinds": kinds,
                             "area": here, "zombies": self.zombies.len(), "hp": self.player.hp, "hp_max": g.max_hp(),
@@ -9720,7 +9424,7 @@ pub mod ui {
                         "pockets": crate::inventory::POCKETS, "pages": pages, "eq": eq, "veh": veh,
                         "armor": g.armor(), "max_hp": g.max_hp(), "dmg": g.damage_mult(), "speed": g.move_mult(), "crit": g.crit_chance(),
                         "gold": g.gold, "gems": g.gems, "in_game_hp": self.player.hp,
-                        "chest": self.near_chest().map_or(-1, |i| i as i64), "home": self.at_home(),
+                        "home": self.at_home(),
                         "can_repair": self.near_bench() || self.near_npc(4),
                     })
                 }
@@ -9875,7 +9579,6 @@ pub mod ui {
                         "owned": g.cosmetics.iter().any(|c| c == s.id), "equipped": g.skin_char == s.id || g.skin_vehicle == s.id })).collect();
                     json!({ "skins": list, "gems": g.gems, "price": data::CRATE_PRICE, "price10": data::CRATE_PRICE10 })
                 }
-                k if k == "chests" || k.starts_with("chest:") => self.chests_json(k).unwrap_or(Value::Null),
                 "areas" => self.areas_json(),
                 _ => json!({ "error": "bilinmeyen görünüm" }),
             };
@@ -9891,12 +9594,6 @@ pub mod ui {
             // çanta komutlarından önce düzen güncel olsun (seviye atlayınca ana çanta büyür)
             if matches!(cmd, "equip" | "unequip" | "use" | "drop" | "move" | "split" | "move_page" | "sort" | "chest_take" | "chest_all") {
                 self.progress.relayout_inv();
-            }
-            if let Some(r) = self.chest_command(cmd, &v) {
-                return match r {
-                    Ok(m) => reply(true, m),
-                    Err(m) => reply(false, m),
-                };
             }
             let res: Result<String, String> = match cmd {
                 "equip" => self.progress.equip_slot(int("slot")).map(|n| format!("{n} kuşanıldı")).map_err(String::from),
@@ -10461,19 +10158,9 @@ pub mod ui {
                         .map(|n| format!("{n} kuşanıldı"))
                         .map_err(String::from);
                 }
-                ItemKind::Chest => return self.place_chest(slot),
                 ItemKind::Bench => return self.place_bench(slot),
                 ItemKind::Tool if d.id.starts_with("veh_") => return self.summon_vehicle(if d.id == "veh_car" { 2 } else { 1 }),
                 ItemKind::Tool => return Err("Alet çantanda durdukça işe yarar".into()),
-                ItemKind::Consumable if d.id == "char_card" => {
-                    self.progress.inv.take_n(slot, Some(1));
-                    let r = self.rng.below(100);
-                    let i = data::char_roll(r);
-                    let gems = self.progress.add_char_card(i);
-                    self.progress.gems += gems;
-                    let c = &CHARACTERS[i];
-                    return Ok(if gems > 0 { format!("{} kartı (en üst seviyede: +{gems} elmas)", c.name) } else { format!("{} kartı! ({} kart)", c.name, self.progress.char_cards[i]) });
-                }
                 ItemKind::Consumable => {}
                 _ if d.id == "fuel" => {
                     let vi = self.player.vehicle.ok_or("Önce bir araca bin")?;
@@ -10983,27 +10670,15 @@ pub mod ui {
                         "toxic" | "toksik" => data::ZKind::Toxic,
                         "dark" | "karanlik" => data::ZKind::Dark,
                         "tank" => data::ZKind::Tank,
-                        "mystery" | "gizemli" => data::ZKind::Mystery,
-                        "titan" | "boss" => data::ZKind::Titan,
                         _ => data::ZKind::Walker,
                     };
                     let n = (num(2, 1.0) as u32).clamp(1, 30);
                     let lvl = (num(3, self.progress.level as f32) as u32).clamp(1, 60);
                     for k in 0..n {
                         let a = k as f32 * 0.7 + self.rng.range(0.0, 0.5);
-                        self.spawn_zombie_at(kind, lvl, px + a.cos() * 320.0, py + a.sin() * 320.0);
+                        self.spawn_regional(kind, lvl, px + a.cos() * 320.0, py + a.sin() * 320.0);
                     }
                     Ok(format!("{n}× {} doğdu", data::ZOMBIES[kind as usize].name))
-                }
-                "boss" => {
-                    // Titan'ı buraya taşı (yoksa bölge Titan'ı dilim başında çağrılanı siler)
-                    let (tx, ty) = (px + 420.0, py - 200.0);
-                    self.titan = (self.titan_slot(), crate::areas::area_at(px, py), tx, ty);
-                    self.titan_dead = false;
-                    self.zombies.retain(|z| !z.boss);
-                    self.spawn_zombie_at(data::ZKind::Titan, 50, tx, ty);
-                    self.events.push(Event::Boss { name: "TİTAN".into() });
-                    Ok("TİTAN çağrıldı!".into())
                 }
                 "killall" | "temizle" => {
                     let n = self.zombies.len();
@@ -11139,7 +10814,7 @@ pub mod ui {
                     Ok("Profil sıfırlandı".into())
                 }
                 _ => Err("Komutlar: gold N, gem N, item id N, items, weapons, level N, xp N, charlevel N, \
-                          god, onehit, speed X, time H, day, night, heal, spawn tür N lvl, boss, killall, tp city|camp|boss|swamp|downtown|deep|burnt|desert|bswamp|military|harbor|home|base N|x y, \
+                          god, onehit, speed X, time H, day, night, heal, spawn tür N lvl, killall, tp city|camp|boss|swamp|downtown|deep|burnt|desert|bswamp|military|harbor|home|base N|x y, \
                           unlock, pass N, pass buy [elite], vehicle moto|car, points N, fuel, clearbag, nocd, invis, timescale X, dog N, potions, reset"
                     .into()),
             }
@@ -11181,7 +10856,7 @@ pub mod ui {
                 "gold 10000", "gem 500", "level 10", "level 50", "xp 5000", "charlevel 10", "items", "weapons", "points 10", "nocd", "nocd", "invis", "invis", "timescale 2", "timescale 1", "dog 5", "potions",
                 "item w_katana 1", "item medkit 5", "god", "god", "onehit", "onehit",
                 "speed 2", "speed 1", "heal", "day", "night", "time 18", "spawn walker 3", "spawn runner 2", "spawn dog 2",
-                "spawn toxic 2", "spawn dark 2", "spawn tank 1", "spawn mystery 1", "boss", "killall", "vehicle moto",
+                "spawn toxic 2", "spawn dark 2", "spawn tank 1", "killall", "vehicle moto",
                 "vehicle car", "fuel", "tp camp", "tp city", "tp swamp", "tp deep", "tp downtown", "tp boss", "tp 100 100",
                 "unlock", "pass 30", "pass buy", "pass buy elite", "clearbag", "reset",
             ];
@@ -11251,17 +10926,6 @@ pub mod ui {
             g.cheat("item stone 22").unwrap();
             let st = g.progress.inv.slots.iter().position(|s| s.is_some_and(|s| crate::data::ITEMS[s.item as usize].id == "stone")).unwrap();
             g.progress.inv.move_to_page(st, 1).unwrap();
-            g.cheat("item chest_iron 1").unwrap();
-            let cs = g.progress.inv.slots.iter().position(|s| s.is_some_and(|s| crate::data::ITEMS[s.item as usize].id == "chest_iron")).unwrap();
-            let (px, py) = (g.player.x, g.player.y + 40.0);
-            let ci = g.progress.place_chest(cs, px, py).unwrap();
-            g.cheat("item scrap 40").unwrap();
-            let sc = g.progress.inv.slots.iter().position(|s| s.is_some_and(|s| crate::data::ITEMS[s.item as usize].id == "scrap")).unwrap();
-            g.progress.chest_put(ci, sc, Some(25)).unwrap();
-            g.cheat("item ring_copper 1").unwrap();
-            let rc = g.progress.inv.slots.iter().position(|s| s.is_some_and(|s| crate::data::ITEMS[s.item as usize].id == "ring_copper")).unwrap();
-            g.progress.chest_put(ci, rc, None).unwrap();
-            std::fs::write(format!("{dir}/chest.json"), g.ui_json(&format!("chest:{ci}"))).unwrap();
             // sezon bileti: kademe 7, premium açık, ilk ödüller alınmış, görevlerde ilerleme
             g.progress.sync_season(1);
             g.progress.pass.xp = 7450;
@@ -11536,111 +11200,96 @@ pub mod world {
     }
 
     /// Kotlin bu isimleri sprite atlasındaki görsellerle eşler. Sıra değişmemeli.
+    /// V22: oyundan kaldırılan dünya nesneleri (görselleri silindi). Üretimde yerlerine görünmez, çarpışmasız bir yer tutucu
+    /// konur: rastgele sıra ve nesne dizinleri (çok oyunculu kırılma eşlemesi) değişmez.
+    pub const REMOVED_STATICS: &[&str] = &[
+        "apartment0", "apartment1", "barrel", "birch0", "birch1", "burnt_car", "campfire", "charger",
+        "chest_iron", "chest_iron_open", "chest_mil", "chest_mil_open", "chest_wood", "chest_wood_open", "d_burnt_6", "d_city_0",
+        "d_forest_7", "dead0", "dead1", "desert_wreck", "front_barbed", "gas", "gate", "house0",
+        "house1", "house2", "hq_command_tent", "jeep_wreck", "jeep_wreck2", "kennel", "l_forest_1", "lamp",
+        "log", "mailbox", "med_tent", "mil_tent", "oak0", "oak2", "oak_autumn", "pine2",
+        "stall", "tent", "tent_olive", "tent_patched", "tent_tarp", "wall_x", "wall_z", "watchtower",
+        "wreck0", "wreck1",
+    ];
+    /// kaldırılan nesnenin yer tutucu adı ve dizini (STATIC_NAMES'in son öğesi)
+    pub const EMPTY_STATIC: &str = "-";
+    pub const EMPTY_IDX: u16 = (STATIC_NAMES.len() - 1) as u16;
+
     pub const STATIC_NAMES: &[&str] = &[
-        "oak0",
         "oak1",
-        "oak2",
-        "oak_autumn",
         "pine0",
         "pine1",
-        "pine2",
-        "birch0",
-        "birch1",
-        "dead0",
-        "dead1", // 0-10
         "bush0",
         "bush1",
         "bush2",
         "bush3",
-        "bush4", // 11-15
+        "bush4",
         "rock_big0",
         "rock_big1",
         "rock_big2",
         "rock_small0",
         "rock_small1",
-        "rock_small2", // 16-21
+        "rock_small2",
         "stump",
-        "log",
         "grass0",
         "grass1",
         "grass2",
-        "grass3", // 22-27
+        "grass3",
         "flower_daisy",
         "flower_poppy",
         "flower_corn",
         "flower_butter",
-        "flower_lavender", // 28-32
+        "flower_lavender",
         "mushrooms0",
         "mushrooms1",
         "reeds0",
-        "reeds1", // 33-36
-        "house0",
-        "house1",
-        "house2",
-        "apartment0",
-        "apartment1",
+        "reeds1",
         "shop0",
         "shop1",
         "police",
-        "gas", // 37-45
-        "wall_x",
-        "wall_z",
-        "gate",
         "tower",
-        "lamp",
-        "wreck0",
-        "wreck1",
-        "chest_wood",
-        "chest_mil",
-        "barrel",
-        "barrel_tox", // 46-56
+        "barrel_tox",
         "workbench",
-        "campfire",
-        "tent",
-        "stall",
         "sandbags",
         "fence",
         "trash",
-        "cone", // 57-64
+        "cone",
         "quest_board",
         "med_station",
-        "kennel",
         "fuel_pump",
         "anvil",
-        "mailbox",
         "barricade",
-        "charger", // 65-72 (V6 kamp nesneleri)
-        "med_tent",
+       
         "mystery_tree",
-        "gas_station", // 73-75 (V7 piksel yer işaretleri)
-        "portal", // 76 (V8 kişisel üs dönüş kapısı)
-        // 77+ V8 kullanıcı görselleri (art/v8/props): bölge simge yapıları, üs yapıları, kişisel üs eşyaları
-        "burnt_tree", "burnt_stump", "desert_wreck", "swamp_shack", "harbor_containers", "hangar", "bunker", "watchtower",
-        "helipad", "chest_iron", "bed", "stove", "fence_wood", "base_gate", "weapon_rack", "rain_barrel",
-        // 93+ V10 bölge dekorları (art/v10/props): donmuş liman, yanık orman, çöl, kara bataklık, askerî bölge, eski şehir, kamp çadırları
+        "gas_station",
+        "portal",
+        // V8 kullanıcı görselleri (Art/v8/props): bölge simge yapıları, üs yapıları, kişisel üs eşyaları
+        "burnt_tree", "burnt_stump", "swamp_shack", "harbor_containers", "hangar", "bunker",         "helipad", "bed", "stove", "fence_wood", "base_gate", "weapon_rack", "rain_barrel",
+        // V10 bölge dekorları (Art/v10/props): donmuş liman, yanık orman, çöl, kara bataklık, askerî bölge, eski şehir, kamp çadırları
         "snow_pine", "ice_boulder", "frozen_boat", "anchor_snow", "snow_barrels",
         "burnt_pine", "smolder_log", "charred_log", "deer_skeleton", "ember_rocks",
         "cactus", "cow_skull", "road_sign", "cone_pile", "gas_can",
         "moss_tree", "mushroom_log", "rowboat", "reeds", "toxic_puddle",
-        "mil_tent", "jeep_wreck", "radar_dish", "ammo_stack", "jeep_wreck2", "sandbag_nest",
-        "street_lamp", "bus_stop", "burnt_car", "dumpster", "billboard",
-        "tent_patched", "tent_olive", "tent_tarp",
+        "radar_dish", "ammo_stack", "sandbag_nest",
+        "street_lamp", "bus_stop", "dumpster", "billboard",
         // V13 (V11 paketi): cephe ve karargâh, eğitim üssü, karantina sınırı
-        "front_trench", "front_crater", "front_barbed", "front_tank_wreck",
-        "hq_command_tent", "hq_radio_mast", "hq_flag", "hq_sign",
+        "front_trench", "front_crater", "front_tank_wreck",
+        "hq_radio_mast", "hq_flag", "hq_sign",
         "train_dummy", "train_sign", "train_target",
         "quarantine_wall", "quarantine_post", "quarantine_sign", "border_searchlight", "border_bones",
         // V13 bölge paketi: sınır parçaları (b), dekorlar (d), simge yapılar (l); areas::AREAS sırasıyla
-        "b_forest_0", "b_forest_1", "b_forest_2", "b_forest_3", "b_forest_4", "b_forest_5", "d_forest_0", "d_forest_1", "d_forest_2", "d_forest_3", "d_forest_4", "d_forest_5", "d_forest_6", "d_forest_7", "l_forest_1", "l_forest_2",
-        "b_city_0", "b_city_1", "b_city_2", "b_city_3", "b_city_4", "b_city_5", "d_city_0", "d_city_1", "d_city_2", "d_city_3", "d_city_4", "d_city_5", "d_city_6", "d_city_7", "l_city_1", "l_city_2",
-        "b_burnt_0", "b_burnt_1", "b_burnt_2", "b_burnt_3", "b_burnt_4", "b_burnt_5", "d_burnt_0", "d_burnt_1", "d_burnt_2", "d_burnt_3", "d_burnt_4", "d_burnt_5", "d_burnt_6", "d_burnt_7", "l_burnt_1", "l_burnt_2",
+        "b_forest_0", "b_forest_1", "b_forest_2", "b_forest_3", "b_forest_4", "b_forest_5", "d_forest_0", "d_forest_1", "d_forest_2", "d_forest_3", "d_forest_4", "d_forest_5", "d_forest_6", "l_forest_2",
+        "b_city_0", "b_city_1", "b_city_2", "b_city_3", "b_city_4", "b_city_5", "d_city_1", "d_city_2", "d_city_3", "d_city_4", "d_city_5", "d_city_6", "d_city_7", "l_city_1", "l_city_2",
+        "b_burnt_0", "b_burnt_1", "b_burnt_2", "b_burnt_3", "b_burnt_4", "b_burnt_5", "d_burnt_0", "d_burnt_1", "d_burnt_2", "d_burnt_3", "d_burnt_4", "d_burnt_5", "d_burnt_7", "l_burnt_1", "l_burnt_2",
         "b_desert_0", "b_desert_1", "b_desert_2", "b_desert_3", "b_desert_4", "b_desert_5", "d_desert_0", "d_desert_1", "d_desert_2", "d_desert_3", "d_desert_4", "d_desert_5", "d_desert_6", "d_desert_7", "l_desert_1", "l_desert_2",
         "b_bswamp_0", "b_bswamp_1", "b_bswamp_2", "b_bswamp_3", "b_bswamp_4", "b_bswamp_5", "d_bswamp_0", "d_bswamp_1", "d_bswamp_2", "d_bswamp_3", "d_bswamp_4", "d_bswamp_5", "d_bswamp_6", "d_bswamp_7", "l_bswamp_1", "l_bswamp_2",
         "b_harbor_0", "b_harbor_1", "b_harbor_2", "b_harbor_3", "b_harbor_4", "b_harbor_5", "d_harbor_0", "d_harbor_1", "d_harbor_2", "d_harbor_3", "d_harbor_4", "d_harbor_5", "d_harbor_6", "d_harbor_7", "l_harbor_1", "l_harbor_2",
         "b_front_0", "b_front_1", "b_front_2", "b_front_3", "b_front_4", "b_front_5", "d_front_0", "d_front_1", "d_front_2", "d_front_3", "d_front_4", "d_front_5", "d_front_6", "d_front_7", "l_front_1", "l_front_2",
         "b_home_0", "b_home_1", "b_home_2", "b_home_3", "b_home_4", "b_home_5", "d_home_0", "d_home_1", "d_home_2", "d_home_3", "d_home_4", "d_home_5", "d_home_6", "d_home_7",
-        // V19 bölge kaya varyantları (tools/assetgen/v19_nature.py): çölde kumtaşı, limanda karlı kaya
+        // V19 bölge kaya varyantları (Tools/assetgen/v19_nature.py): çölde kumtaşı, limanda karlı kaya
         "rock_sand0", "rock_sand1", "rock_snow0",
+        // V22: oyundan kaldırılan nesnelerin yer tutucusu (görseli yok, çizilmez, çarpışmaz)
+        EMPTY_STATIC,
     ];
     pub fn sprite(name: &str) -> u16 {
         STATIC_NAMES.iter().position(|n| *n == name).unwrap_or(0) as u16
@@ -11769,7 +11418,7 @@ pub mod world {
                 Zone::Suburb => "Banliyö",
                 Zone::Downtown => "Şehir Merkezi",
                 Zone::Industrial => "Sanayi Bölgesi",
-                Zone::BossArena => "Titan Arenası",
+                Zone::BossArena => "Eski Arena",
                 Zone::Outpost => "Karakol (Güvenli)",
                 Zone::BurntForest => "Yanık Orman",
                 Zone::Desert => "Çöl Otoyolu",
@@ -11829,13 +11478,12 @@ pub mod world {
                     (ZKind::Tank, 15),
                     (ZKind::Walker, 15),
                     (ZKind::Dog, 8),
-                    (ZKind::Mystery, 2),
                 ],
                 Zone::BurntForest => &[(ZKind::Walker, 35), (ZKind::Runner, 30), (ZKind::Dark, 20), (ZKind::Dog, 15)],
                 Zone::Desert => &[(ZKind::Runner, 35), (ZKind::Walker, 25), (ZKind::Tank, 20), (ZKind::Dog, 20)],
-                Zone::BlackSwamp => &[(ZKind::Toxic, 50), (ZKind::Dark, 25), (ZKind::Walker, 20), (ZKind::Mystery, 5)],
-                Zone::Military => &[(ZKind::Tank, 30), (ZKind::Dark, 25), (ZKind::Runner, 25), (ZKind::Toxic, 10), (ZKind::Mystery, 5), (ZKind::Dog, 5)],
-                Zone::Harbor => &[(ZKind::Dark, 35), (ZKind::Tank, 25), (ZKind::Runner, 20), (ZKind::Toxic, 10), (ZKind::Mystery, 10)],
+                Zone::BlackSwamp => &[(ZKind::Toxic, 50), (ZKind::Dark, 25), (ZKind::Walker, 20)],
+                Zone::Military => &[(ZKind::Tank, 30), (ZKind::Dark, 25), (ZKind::Runner, 25), (ZKind::Toxic, 10), (ZKind::Dog, 5)],
+                Zone::Harbor => &[(ZKind::Dark, 35), (ZKind::Tank, 25), (ZKind::Runner, 20), (ZKind::Toxic, 10)],
                 // V12: üslerde ve çevresinde zombi yok, yalnız üs askerleri (botlar)
                 Zone::Front => &[],
                 Zone::Industrial | Zone::BossArena => &[
@@ -11843,7 +11491,6 @@ pub mod world {
                     (ZKind::Toxic, 25),
                     (ZKind::Tank, 20),
                     (ZKind::Runner, 15),
-                    (ZKind::Mystery, 4),
                     (ZKind::Dog, 6),
                 ],
                 _ => &[],
@@ -11861,7 +11508,7 @@ pub mod world {
     pub const SAFE_Y1: usize = 146;
     pub const CAMP: (f32, f32) = (180.0 * TILE, 300.0 * TILE);
     pub const CAMP_R: f32 = 11.0 * TILE;
-    /// eski Titan arenası (V15: şehir karesinin kuzeydoğu köşesi)
+    /// eski arena (V15: şehir karesinin kuzeydoğu köşesi)
     pub const BOSS: (f32, f32) = (253.0 * TILE, 24.0 * TILE);
 
     pub fn city_spawn() -> (f32, f32) {
@@ -12115,6 +11762,9 @@ pub mod world {
             // V21: yerde kırılan sandık yok (sandıklar yalnız kişisel üstedeki depo sandıkları): eski ganimet sandıkları ve
             // süs sandıkları çimene döner (dizinler değişmesin diye aynı sırada kalır)
             let (name, kind, shape, hp) = if kind == Kind::Crate || name.starts_with("chest_") { ("grass2", Kind::Deco, shape, 0.0) } else { (name, kind, shape, hp) };
+            // V22: kaldırılan nesneler görünmez yer tutucu olur. Biçimi üretim boyunca yerleşim aralığı için kalır (dünyanın geri
+            // kalanı aynı yerleşir), üretim bitince çarpışmasız yapılır (generate → strip_removed)
+            let (name, kind, hp) = if REMOVED_STATICS.contains(&name) { (EMPTY_STATIC, Kind::Deco, 0.0) } else { (name, kind, hp) };
             // V20: çöldeki kaktüs (kuru ağacın çöl hâli) kesilmez: kırılmaz süs
             let kind = if name == "cactus" { Kind::Prop } else { kind };
             // V11: ağaç ve kaya 500 can (vuruş gücü alete bağlı, bkz. Game::hit_static)
@@ -12401,6 +12051,10 @@ pub mod world {
                 if v.0 == 3 {
                     v.0 = 2;
                 }
+            }
+            // V22: kaldırılan nesnelerin yer tutucuları çarpışmaz
+            for s in w.statics.iter_mut().filter(|s| s.sprite == EMPTY_IDX) {
+                s.shape = Shape::None;
             }
             w.build_grid();
             w
@@ -14808,19 +14462,6 @@ mod combat {
                 v: dmg.min(99999.0).round() as i32,
                 crit,
             });
-            // Gizemli: ilk vuruşta kopya
-            if z.kind == ZKind::Mystery && !z.cloned && !z.decoy {
-                z.cloned = true;
-                let mut c = z.clone();
-                c.decoy = true;
-                c.hp = 1.0;
-                c.max_hp = 1.0;
-                c.x += 60.0;
-                self.zombies.push(c);
-                let z = &mut self.zombies[i];
-                z.x -= 40.0;
-                self.events.push(Event::Teleport { x: zx, y: zy });
-            }
             let z = &mut self.zombies[i];
             if z.hp <= 0.0 {
                 z.state = ZState::Dead;
@@ -14943,27 +14584,6 @@ mod combat {
                     let rv = self.rng.below(3);
                     self.spawn_drop_id("scrap", 1 + rv, z.x, z.y);
                 }
-                ZKind::Mystery => {
-                    for (id, p) in [("w_katana", 0.03), ("ring_hunter", 0.05), ("neck_amulet", 0.05)] {
-                        if self.rng.chance(p * mult) {
-                            self.spawn_drop_id(id, 1, z.x, z.y);
-                        }
-                    }
-                }
-                ZKind::Titan => {
-                    self.titan_dead = true;
-                    self.progress.titan_killed = self.titan.0;
-                    self.progress.boss_kills += 1;
-                    done.extend(self.progress.quest_event(QuestKind::Boss, 1));
-                    let rv = self.rng.below(3);
-                    self.spawn_drop_id("titan_shard", 3 + rv, z.x, z.y);
-                    for id in ["w_katana", "potion_power", "potion_speed", "potion_heal", "ring_titan"] {
-                        if self.rng.chance(0.25) {
-                            self.spawn_drop_id(id, 1, z.x, z.y);
-                        }
-                    }
-                    self.msg("TİTAN YENİLDİ! Titan Parçaları düştü.");
-                }
                 _ => {}
             }
             // genel nadir düşüş: şifa
@@ -15023,49 +14643,16 @@ mod combat {
         pub fn update_areas(&mut self, dt: f32) {
             let (px, py) = (self.player.x, self.player.y);
             let mut pdmg = 0.0;
-            let mut shock: Option<(f32, f32, f32)> = None;
             for a in self.areas.iter_mut() {
                 a.life -= dt;
-                match a.kind {
-                    AreaKind::ToxicPuddle | AreaKind::PoisonCloud => {
-                        if (px - a.x).hyp(py - a.y) < a.r {
-                            pdmg += a.dps * dt;
-                            self.player.poison_t = self.player.poison_t.max(1.5);
-                        }
-                    }
-                    AreaKind::Shockwave => {
-                        let k = 1.0 - a.life / a.max_life;
-                        let rr = a.r * k;
-                        let d = (px - a.x).hyp(py - a.y);
-                        if !a.hit_done && (d - rr).abs() < 40.0 {
-                            a.hit_done = true;
-                            shock = Some((a.x, a.y, a.dps));
-                        }
-                    }
-                    _ => {}
+                if matches!(a.kind, AreaKind::ToxicPuddle | AreaKind::PoisonCloud) && (px - a.x).hyp(py - a.y) < a.r {
+                    pdmg += a.dps * dt;
+                    self.player.poison_t = self.player.poison_t.max(1.5);
                 }
             }
             self.areas.retain(|a| a.life > 0.0);
             if pdmg > 0.0 {
                 self.damage_player_dot(pdmg);
-            }
-            if let Some((sx, sy, d)) = shock {
-                // Titan dalgası: takla atan kaçar; değerse geri savrulur ve yere düşer
-                if !self.player_invulnerable() {
-                    self.damage_player_blast(d);
-                    let (dx, dy) = (px - sx, py - sy);
-                    let l = dx.hyp(dy).max(1.0);
-                    let (mut nx, mut ny) = (px + dx / l * 110.0, py + dy / l * 110.0);
-                    let gate = self.progress.level >= crate::progress::CITY_LEVEL;
-                    self.world.resolve(&mut nx, &mut ny, 14.0, gate, &mut self.scratch);
-                    crate::areas::clamp(px, py, &mut nx, &mut ny);
-                    self.player.x = nx;
-                    self.player.y = ny;
-                    self.player.hurt_t = 1.1;
-                    self.player.knocked = true;
-                    self.player.atk_active = false;
-                    self.events.push(Event::Knockdown);
-                }
             }
         }
     }
@@ -15145,6 +14732,10 @@ mod draw {
                 if s.kind == Kind::Deco && ((s.phase * 1000.0) % 1.0) > deco_density {
                     continue;
                 }
+                // kaldırılan nesnenin yer tutucusu çizilmez
+                if s.sprite == crate::world::EMPTY_IDX {
+                    continue;
+                }
                 let mut sprite = s.sprite as f32;
                 if s.broken {
                     match s.kind {
@@ -15222,7 +14813,7 @@ mod draw {
                 // yer efektleri en altta çizilir (anahtar çok küçük)
                 let key = if matches!(
                     a.kind,
-                    AreaKind::ToxicPuddle | AreaKind::Heal | AreaKind::Shockwave
+                    AreaKind::ToxicPuddle | AreaKind::Heal
                 ) {
                     -1e9 + a.y
                 } else {
@@ -15769,10 +15360,6 @@ pub mod areas {
     pub const CITY: usize = 1;
     pub const FRONT: usize = 6;
     pub const HOME: usize = 7;
-    /// Titan'ın uyanabildiği bölgeler (başlangıç ormanı, cephe ve kişisel üs hariç)
-    pub const TITAN_AREAS: &[usize] = &[1, 2, 3, 4, 5];
-    /// Titan dilimi (sn)
-    pub const TITAN_SLOT: f64 = 900.0;
 
     /// V15 kare bölgeler (karo): (x0, y0, kenar). Eski dünyanın içeriği bu karelerin içinde kalır; dışı boşluktur.
     /// Cephe Hattı eski doğu/güney şeridin yerine kuzeydoğuda tek bir karedir (üsler ızgarada, bkz. bases.rs).
@@ -15916,7 +15503,6 @@ pub mod areas {
                 ZKind::Dog => &["leather"],
                 ZKind::Tank => &["scrap"],
                 ZKind::Dark => &["neck_dark"],
-                ZKind::Mystery => &["ring_hunter", "neck_amulet"],
                 _ => &[],
             });
         }
@@ -15944,21 +15530,17 @@ pub mod areas {
                             json!({ "name": s.name, "sprite": format!("z/{}/idle_0_0", s.id), "lo": lo, "hi": hi, "color": ZOMBIES[s.base as usize].color })
                         })
                         .collect();
-                    // bölge türü aynı rolü üstlendiyse klasik görünüş o bölgede çıkmaz: listede de yok
+                    // klasik görünüş yalnız karanlık ve tank zombide; onlar da bölge türü aynı rolü üstlenmediyse
                     mobs.extend(creatures(i)
                         .iter()
-                        .filter(|&&(k, _, _)| !active.iter().any(|s| s.base == k))
+                        .filter(|&&(k, _, _)| matches!(k, ZKind::Dark | ZKind::Tank) && !active.iter().any(|s| s.base == k))
                         .map(|&(k, lo, hi)| {
                             let d = &ZOMBIES[k as usize];
                             json!({ "name": d.name, "sprite": format!("z/{}/idle_0_0", d.sprite), "lo": lo, "hi": hi, "color": d.color })
                         }));
-                    if i == self.titan.1 && !self.titan_dead {
-                        let d = &ZOMBIES[ZKind::Titan as usize];
-                        mobs.insert(0, json!({ "name": format!("{} (Şimdi Burada!)", d.name), "sprite": "z/magma/idle_0_0", "lo": 50, "hi": 50, "color": d.color }));
-                    }
                     if i == FRONT {
-                        mobs.push(json!({ "name": "Üs Askeri (Bot)", "sprite": "npc/soldier", "lo": 28, "hi": 50, "color": 0xFFC8D0A0u32 }));
-                        mobs.push(json!({ "name": "Keskin Nişancı (Bot)", "sprite": "npc/soldier", "lo": 28, "hi": 50, "color": 0xFFE0C080u32 }));
+                        mobs.push(json!({ "name": "Üs Askeri (Bot)", "sprite": "", "lo": 28, "hi": 50, "color": 0xFFC8D0A0u32 }));
+                        mobs.push(json!({ "name": "Keskin Nişancı (Bot)", "sprite": "", "lo": 28, "hi": 50, "color": 0xFFE0C080u32 }));
                         mobs.push(json!({ "name": "Kalkanlı Asker (Bot)", "sprite": "z/shieldbot/idle_0_0", "lo": 28, "hi": 50, "color": 0xFF9AC0E0u32 }));
                         mobs.push(json!({ "name": "Alev Makineli Asker (Bot)", "sprite": "z/flamebot/idle_0_0", "lo": 28, "hi": 50, "color": 0xFFFF9A4Au32 }));
                     }
@@ -15967,77 +15549,14 @@ pub mod areas {
                         "rects": a.rects.iter().map(|&(x0, y0, x1, y1)| json!([x0 * TILE, y0 * TILE, x1 * TILE, y1 * TILE])).collect::<Vec<_>>(),
                         "hub": [hx, hy], "level": a.level, "rec": [a.rec.0, a.rec.1], "cost": a.cost,
                         "here": i == here, "open": lv >= a.level, "safe": a.zones.iter().all(|z| z.safe()),
-                        "mobs": mobs, "drops": drops(i), "titan": i == self.titan.1 && !self.titan_dead,
+                        "mobs": mobs, "drops": drops(i),
                     })
                 })
                 .collect();
-            let (_, ta, tx, ty) = self.titan;
             json!({ "areas": list, "here": here, "gold": self.progress.gold, "cd": self.wiz_cd.max(0.0), "near": self.near_wizard(),
-                "titan": { "area": ta, "name": AREAS.get(ta).map(|a| a.name), "x": tx, "y": ty, "left": self.titan_left(), "dead": self.titan_dead },
                 // gezgin tüccar kamyonetleri (haritada işaret)
                 "merchant": self.caravans.iter().map(|c| { let p = self.caravan_park(c);
                     json!({ "x": c.x, "y": c.y, "parked": c.parked, "area": c.area, "park": [p.0, p.1] }) }).collect::<Vec<_>>() })
-        }
-
-        /// Titan zaman dilimi (15 dk): sunucu saati (üs saati) geldiyse onunla (her oyuncuda aynı), yoksa oyun süresiyle
-        pub fn titan_slot(&self) -> i64 {
-            if self.base_clock > 0.0 {
-                (self.base_clock / (TITAN_SLOT * 1000.0)) as i64
-            } else {
-                // çevrimdışı: oyun süresiyle (oturumlar arası artar; her girişte 0. dilime dönüp Titan'ı yeniden doğurmaz)
-                (self.progress.play_time / TITAN_SLOT) as i64
-            }
-        }
-
-        /// Dilimin Titan'ı: bölge ve yer (tohum + dilimden; her istemcide aynı). Güvenli olmayan, boş bir yer seçilir.
-        pub fn titan_spot(&self, slot: i64) -> (usize, f32, f32) {
-            let mut rng = crate::rng::Rng::new(self.world.seed ^ 0x7174_A400 ^ (slot as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
-            let a = TITAN_AREAS[rng.below(TITAN_AREAS.len() as u32) as usize];
-            let mut scratch = Vec::new();
-            for _ in 0..60 {
-                let r = AREAS[a].rects[0];
-                let tx = rng.range(r.0 + 20.0, r.2 - 20.0);
-                let ty = rng.range(r.1 + 20.0, r.3 - 20.0);
-                let (x, y) = (tx * TILE, ty * TILE);
-                let z = self.world.zone(x, y);
-                if !z.safe() && z != Zone::Wall && area_at(x, y) == a && !self.world.blocked(x, y, 40.0, &mut scratch) {
-                    return (a, x, y);
-                }
-            }
-            let (hx, hy) = hub(a);
-            (a, hx + 30.0 * TILE, hy)
-        }
-
-        /// V12.1: Titan her 15 dakikada başka bir bölgede uyanır (sabit arena yok). Dilim değişince eskisi kaybolur ve
-        /// herkese duyurulur; oyuncu yaklaşınca doğar; o dilimde öldürülürse bir sonrakine kadar gelmez.
-        pub(crate) fn update_titan(&mut self, px: f32, py: f32) {
-            let slot = self.titan_slot();
-            if slot != self.titan.0 {
-                let (a, x, y) = self.titan_spot(slot);
-                let first = self.titan.0 == i64::MIN;
-                self.titan = (slot, a, x, y);
-                // bu dilimde zaten öldürüldüyse (çıkıp yeniden girdiysek) yeniden doğmaz
-                self.titan_dead = self.progress.titan_killed == slot;
-                self.zombies.retain(|z| !z.boss);
-                if !first {
-                    self.msg(format!("TİTAN {} bölgesinde uyandı! 15 dakika orada kalacak.", AREAS[a].name));
-                }
-            }
-            let (_, _, bx, by) = self.titan;
-            let alive = self.zombies.iter().any(|z| z.boss && z.state != crate::game::ZState::Dead);
-            if !alive && !self.titan_dead && (bx - px).hyp(by - py) < 1600.0 {
-                self.spawn_zombie_at(ZKind::Titan, 50, bx, by);
-                self.events.push(crate::game::Event::Boss { name: "TİTAN".into() });
-            }
-        }
-
-        /// Titan'ın kalan süresi (sn, dilim sonuna kadar)
-        pub fn titan_left(&self) -> f32 {
-            if self.base_clock > 0.0 {
-                (TITAN_SLOT - (self.base_clock / 1000.0) % TITAN_SLOT) as f32
-            } else {
-                (TITAN_SLOT - self.progress.play_time % TITAN_SLOT) as f32
-            }
         }
 
         /// Oyuncu bir büyücünün yanında mı (büyücü haritası yalnız onunla konuşurken açılır)
@@ -16100,36 +15619,6 @@ pub mod areas {
                     a.id
                 );
             }
-        }
-
-        #[test]
-        fn titan_moves_every_slot_and_stays_dead_when_killed() {
-            let mut g = crate::game::Game::new(7, crate::Progress::default(), 0);
-            let mut seen = std::collections::HashSet::new();
-            for slot in 0..40 {
-                let (a, x, y) = g.titan_spot(slot);
-                assert!(TITAN_AREAS.contains(&a));
-                assert_eq!(area_at(x, y), a);
-                assert!(!g.world.zone(x, y).safe());
-                assert_eq!(g.titan_spot(slot), (a, x, y), "aynı dilim aynı yer");
-                seen.insert(a);
-            }
-            assert!(seen.len() >= 4, "Titan hep aynı bölgelerde: {seen:?}");
-            // sunucu saatiyle dilim; yaklaşınca doğar
-            g.base_clock = 1_800_000_000_000.0;
-            g.update_titan(0.0, 0.0);
-            let (_, _, bx, by) = g.titan;
-            g.update_titan(bx, by + 300.0);
-            assert!(g.zombies.iter().any(|z| z.boss));
-            // öldürüldü: dilim bitene kadar gelmez
-            g.zombies.clear();
-            g.titan_dead = true;
-            g.update_titan(bx, by + 300.0);
-            assert!(!g.zombies.iter().any(|z| z.boss));
-            // yeni dilim: başka yer ve yeniden uyanır
-            g.base_clock += TITAN_SLOT * 1000.0;
-            g.update_titan(0.0, 0.0);
-            assert!(!g.titan_dead);
         }
 
         #[test]
@@ -16400,7 +15889,6 @@ pub mod caravan {
         ("workbench", 30, 120, 1, 1),
         ("potion_speed", 25, 130, 6, 2),
         ("w_knife", 20, 130, 1, 1),
-        ("chest_wood", 20, 150, 5, 1),
         ("potion_power", 15, 190, 12, 2),
         // başka bölgelerin malzemeleri (bölgeler arası ticaret)
         ("resin", 30, 12, 1, 8),
@@ -16875,9 +16363,9 @@ mod training {
             assert_eq!(GUIDE[g.progress.story.guide].id, "g4h");
         }
 
-        /// Ana görev zinciri Sv 40'a kadar uzanır: seviyeler artar, her bölge bir karakol + bir av, sonda Titan
+        /// Ana görev zinciri Sv 40'a kadar uzanır: seviyeler artar, her bölge bir karakol + bir av, sonda Donmuş Liman avı
         #[test]
-        fn main_chain_reaches_level_40_and_ends_with_titan() {
+        fn main_chain_reaches_level_40_and_ends_in_harbor() {
             use crate::story::{Goal, MAIN};
             let mut last = 0;
             for q in MAIN {
@@ -16886,9 +16374,9 @@ mod training {
                 assert!(!q.talk.is_empty() && !q.done.is_empty() && q.gold > 0, "{} eksik", q.id);
             }
             let q = MAIN.last().unwrap();
-            assert_eq!(q.id, "q20");
+            assert_eq!(q.id, "q19");
             assert_eq!(q.min_level, 40);
-            assert_eq!(q.goal, Goal::KillKind(crate::data::ZKind::Titan));
+            assert_eq!(q.goal, Goal::Kill(Some(crate::world::Zone::Harbor)));
             // her bölge karakolu zincirde var
             for post in ["burnt_post", "desert_post", "bswamp_post", "front_hq", "harbor_post"] {
                 assert!(MAIN.iter().any(|q| q.goal == Goal::Reach(post)), "{post} görevi yok");
@@ -17605,6 +17093,21 @@ mod zombies {
             self.zombies.push(z);
         }
 
+        /// Bölgeye uygun yaratık: bölgenin türü; bölge türü yoksa yalnız karanlık ve tank klasik görünüşüyle doğar.
+        pub fn spawn_regional(&mut self, kind: ZKind, level: u32, x: f32, y: f32) -> bool {
+            let s = self.pick_species(x, y, kind);
+            if s > 0 {
+                let z = self.make_species(s, level, x, y);
+                self.zombies.push(z);
+                true
+            } else if matches!(kind, ZKind::Dark | ZKind::Tank) {
+                self.spawn_zombie_at(kind, level, x, y);
+                true
+            } else {
+                false
+            }
+        }
+
         /// V13 bölge yaratığı: temel türün zombisi, türün can çarpanı ve görseli
         pub fn make_species(&mut self, s: u8, level: u32, x: f32, y: f32) -> Zombie {
             let sp = crate::data::species(s).expect("tür");
@@ -17616,7 +17119,8 @@ mod zombies {
         }
 
         /// bölgenin yaratık türü: zone tablosunun seçtiği davranışa uyan bölge türü her zaman onun yerine geçer (aynı rolde
-        /// iki ayrı görünüş olmasın), yoksa yürüyen/koşan zombi %40 bölgenin rastgele bir türü olur
+        /// iki ayrı görünüş olmasın). Klasik yürüyen, koşan, köpek ve zehirli zombinin görseli yok: onların yerine bölgenin
+        /// rastgele bir türü gelir. Yalnız karanlık ve tank zombi bölge türü bulunmayınca klasik görünüşüyle (0) doğar.
         fn pick_species(&mut self, x: f32, y: f32, kind: ZKind) -> u8 {
             let area = crate::areas::AREAS[crate::areas::area_at(x, y)].id;
             let list: Vec<u8> = crate::data::SPECIES
@@ -17632,10 +17136,10 @@ mod zombies {
             if !same.is_empty() {
                 return same[self.rng.below(same.len() as u32) as usize];
             }
-            if matches!(kind, ZKind::Walker | ZKind::Runner) && self.rng.chance(0.4) {
-                return list[self.rng.below(list.len() as u32) as usize];
+            if matches!(kind, ZKind::Dark | ZKind::Tank) {
+                return 0;
             }
-            0
+            list[self.rng.below(list.len() as u32) as usize]
         }
 
         pub fn update_spawning(&mut self, dt: f32) {
@@ -17656,9 +17160,6 @@ mod zombies {
             // uzaktakileri kaldır
             self.zombies
                 .retain(|z| z.boss || (z.x - px).hyp(z.y - py) < ACTIVE_R + 600.0);
-            // V12.1 Titan: her 15 dakikada rastgele bir bölgede (areas.rs)
-            self.boss_t -= dt;
-            self.update_titan(px, py);
             self.spawn_t -= dt;
             if self.spawn_t > 0.0 {
                 return;
@@ -17732,14 +17233,8 @@ mod zombies {
                     }
                     return;
                 }
-                if kind == ZKind::Dog {
-                    let n = 2 + self.rng.below(3);
-                    for k in 0..n {
-                        let ox = (k as f32 - 1.0) * 40.0;
-                        let rv = self.rng.range(-30.0, 30.0);
-                        self.spawn_zombie_at(ZKind::Dog, level, x + ox, y + rv);
-                    }
-                } else {
+                // bölge türü yoksa yalnız kendi görseli olan klasik türler doğar (karanlık, tank)
+                if matches!(kind, ZKind::Dark | ZKind::Tank) {
                     self.spawn_zombie_at(kind, level, x, y);
                 }
                 return;
@@ -17797,8 +17292,6 @@ mod zombies {
             // birbirini itme (ızgarayla: komşu hücreler; eskiden her çift karşılaştırılıyordu, 10 bin yaratıkta kare başına 50 milyon)
             self.separate_zombies();
             let mut spawn_puddles: Vec<(f32, f32)> = Vec::new();
-            let mut summons: Vec<(f32, f32)> = Vec::new();
-            let mut shockwaves: Vec<(f32, f32)> = Vec::new();
             let mut slams: Vec<(f32, f32, f32, f32)> = Vec::new();
             self.zlod_frame = self.zlod_frame.wrapping_add(1);
             let lod = n > ZLOD_MIN;
@@ -17892,16 +17385,6 @@ mod zombies {
                         if z.state != ZState::Dead {
                             let flick = 0.55 + 0.35 * ((self.time * 7.0 + zi as f32).sin() * 0.5 + 0.5);
                             z.alpha = if self.is_night() { flick * 0.85 } else { flick };
-                        }
-                    }
-                    ZKind::Mystery => {
-                        if z.state != ZState::Dead {
-                            let target = if dist < 170.0 || z.state == ZState::Flee || z.bar_t > 0.0 {
-                                1.0
-                            } else {
-                                0.12
-                            };
-                            z.alpha += (target - z.alpha) * (1.0 - (-4.0 * dt).exp());
                         }
                     }
                     ZKind::Toxic
@@ -18033,9 +17516,6 @@ mod zombies {
                             z.ret = !z.boss && from_home > m(4.0);
                             z.anim = Z_IDLE;
                             z.timer = 1.0;
-                        } else if z.kind == ZKind::Mystery && z.hp < z.max_hp * 0.4 && !z.decoy {
-                            z.state = ZState::Flee;
-                            z.timer = 4.0;
                         } else if z.kind == ZKind::Dark
                             && z.special_cd <= 0.0
                             && dist > 180.0
@@ -18054,14 +17534,6 @@ mod zombies {
                                 z.y = ny;
                             }
                             self.events.push(Event::Teleport { x: z.x, y: z.y });
-                        } else if z.boss && z.special_cd <= 0.0 && dist < 700.0 {
-                            // V13: yere vurma (deprem dalgası) ya da yakındaysa ateş püskürtme; sırayla, rastgele
-                            z.special_cd = if z.enraged { 4.0 } else { 6.5 };
-                            z.state = ZState::Attack;
-                            z.anim = if dist < 480.0 && self.rng.chance(0.5) { Z_BREATH } else { Z_SLAM };
-                            z.anim_t = 0.0;
-                            z.hit_done = false;
-                            z.dir = dir_from_vec(dx, dy);
                         } else if dist < reach && z.attack_cd <= 0.0 && !in_vehicle {
                             z.state = ZState::Attack;
                             z.anim = Z_ATTACK;
@@ -18082,24 +17554,9 @@ mod zombies {
                             z.dir = dir_from_vec(dx, dy);
                             z.anim = Z_IDLE;
                         }
-                        // boss evreleri
-                        if z.boss {
-                            if !z.summoned && z.hp < z.max_hp * 0.5 {
-                                z.summoned = true;
-                                summons.push((z.x, z.y));
-                            }
-                            if !z.enraged && z.hp < z.max_hp * 0.3 {
-                                z.enraged = true;
-                                self.msg("Titan öfkelendi!");
-                            }
-                        }
                     }
                     ZState::Attack => {
-                        let (hit_at, end_at) = match z.anim {
-                            Z_SLAM => (0.62, 1.05),
-                            Z_BREATH => (0.5, 1.2),
-                            _ => (0.3, 0.6),
-                        };
+                        let (hit_at, end_at) = (0.3, 0.6);
                         if !z.hit_done && z.anim_t >= hit_at {
                             z.hit_done = true;
                             let (fx, fy) = dir_vec(z.dir);
@@ -18108,41 +17565,6 @@ mod zombies {
                             match z.kind {
                                 ZKind::Tank => {
                                     slams.push((z.x + fx * 40.0, z.y + fy * 40.0, m(2.0), lvl_dmg));
-                                }
-                                ZKind::Titan if z.anim == Z_SLAM => {
-                                    shockwaves.push((z.x, z.y));
-                                    self.events.push(Event::Magma { x: z.x, y: z.y, a: 1, tx: px, ty: py });
-                                }
-                                ZKind::Titan if z.anim == Z_BREATH => {
-                                    // ateş konisi: 460 px, ±26°; bakılan yöne (hedef) doğru
-                                    let (cx, cy) = (dx / dist.max(1e-3), dy / dist.max(1e-3));
-                                    let cone = |tx: f32, ty: f32| {
-                                        let (ex, ey) = (tx - z.x, ty - z.y);
-                                        let l = ex.hyp(ey);
-                                        l < 460.0 && (ex * cx + ey * cy) / l.max(1e-3) > 0.9
-                                    };
-                                    let burn = lvl_dmg * 1.5;
-                                    if cone(self.player.x, self.player.y) && !in_vehicle {
-                                        player_damage += burn;
-                                    }
-                                    for (k, t) in targets.iter().enumerate() {
-                                        if cone(t.0, t.1) {
-                                            remote_hits.push((k, burn, false));
-                                        }
-                                    }
-                                    self.events.push(Event::Magma { x: z.x, y: z.y, a: 2, tx: z.x + cx * 400.0, ty: z.y + cy * 400.0 });
-                                }
-                                ZKind::Titan => {
-                                    self.events.push(Event::Magma { x: z.x, y: z.y, a: 0, tx: z.x + fx * 90.0, ty: z.y + fy * 90.0 });
-                                    if dist < def.radius + 110.0 {
-                                        if ti == -2 {
-                                            dog_damage += lvl_dmg;
-                                        } else if ti < 0 {
-                                            player_damage += lvl_dmg;
-                                        } else {
-                                            remote_hits.push((ti as usize, lvl_dmg, false));
-                                        }
-                                    }
                                 }
                                 _ => {
                                     if dist < def.radius + 40.0 && facing > 0.2 && !in_vehicle {
@@ -18188,19 +17610,6 @@ mod zombies {
                     hit_done: false,
                 });
             }
-            for (x, y) in shockwaves {
-                self.areas.push(Area {
-                    kind: AreaKind::Shockwave,
-                    x,
-                    y,
-                    r: m(7.0),
-                    life: 1.2,
-                    max_life: 1.2,
-                    dps: 32.0,
-                    hit_done: false,
-                });
-                self.events.push(Event::Slam { x, y, r: m(7.0) });
-            }
             for (x, y, r, d) in slams {
                 self.areas.push(Area {
                     kind: AreaKind::Explosion,
@@ -18238,13 +17647,6 @@ mod zombies {
                     self.player.x = nx;
                     self.player.y = ny;
                 }
-            }
-            for (x, y) in summons {
-                for k in 0..4 {
-                    let a = k as f32 * TAU / 4.0;
-                    self.spawn_zombie_at(ZKind::Walker, 40, x + a.cos() * 160.0, y + a.sin() * 160.0);
-                }
-                self.msg("Titan yardım çağırdı!");
             }
             if player_damage > 0.0 {
                 self.damage_player(player_damage);
@@ -18628,14 +18030,6 @@ pub fn minimap(g: &Game, n: usize, out: &mut [u32]) {
                     }
                 }
                 (1, Kind::Fire, _) => disc(cx, cy, 1.4, 0xFFFFA040, out),
-                // duvarlar (devlet üsleri, kişisel üs, şehir suru)
-                (1, Kind::Prop, Shape::Rect(hw, hh)) if s.sprite == world::sprite("wall_x") || s.sprite == world::sprite("wall_z") => {
-                    for y in (cy - hh * k) as i32..=(cy + hh * k) as i32 {
-                        for x in (cx - hw * k) as i32..=(cx + hw * k) as i32 {
-                            put(x, y, 0xFF2A2622, out);
-                        }
-                    }
-                }
                 _ => {}
             }
         }
