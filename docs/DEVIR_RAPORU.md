@@ -22,7 +22,7 @@ eski geçmiş yalnız Drive'daki zip'te). Kullanıcı kuralı: sürüm bilgisi i
 
 ## 3. Derleme ve test komutları
 - Araç zinciri (V22, 13 Kasım 2026'da kayıtlardan doğrulandı): JDK 25 (Temurin), Gradle 9.9.1, AGP 9.5.1, Kotlin 2.4.21,
-  SDK 37 + build-tools 37.0.0, NDK 30.0.16248370, Rust 1.100 (edition 2024), jni 0.22.4, cargo-ndk 4.1.2.
+  SDK 37 + build-tools 37.0.0, targetSdk 37 (appCategory=game), NDK 30.0.16248370, Rust 1.100 (edition 2024), jni 0.22.4, cargo-ndk 4.1.2.
   Sürüm denetimi: Gradle `services.gradle.org/versions/current`, Google Maven / Maven Central `maven-metadata.xml`,
   `crates.io/api/v1/crates/<ad>`, SDK paketleri `dl.google.com/android/repository/repository2-3.xml`.
 - GameShotsTest referans görüntüleri `.gitignore`'da (yalnız 9 tanesi depoda); `verifyPaparazziDebug` bu yüzden GameShotsTest'te

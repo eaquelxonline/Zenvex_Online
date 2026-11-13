@@ -2,6 +2,17 @@
 
 ## Unreleased (V16 — 3D)
 
+- V22 Android 17 target (targetSdk 36 → 37), following the official "apps targeting Android 17" behavior-change list:
+  - `android:appCategory="game"`: games are exempt from Android 17 ignoring orientation/resizability on large screens
+    (sw600dp+), so tablets and foldables keep the landscape lock instead of being forced into any orientation
+  - background audio hardening: sound effects are not started while no activity is visible (music already paused in onPause)
+  - checked and not affected: static-final reflection, lock-free MessageQueue, local-network permission (the game only uses
+    HTTPS/WSS over the internet), certificate transparency and ECH (on by default; Supabase and the game server use public CAs),
+    safer native loading (libzenvex.so comes from the APK via System.loadLibrary), widgets, SMS OTP, Contacts Provider
+  - lint now passes without errors: the RuntimeShader scene is created only on Android 13+, the display-cutout theme
+    attribute moved to values-v27, demo screenshots are PNG-compressed off the main thread; assets use the AGP 9.5
+    `directories` API instead of the deprecated `srcDir`
+
 - V22 toolchain refresh (all tools on the latest stable release, checked against the registries on 13 Nov 2026):
   - Gradle 9.8.2 → 9.9.1 (wrapper regenerated), Android Gradle Plugin 9.4.1 → 9.5.1, NDK 27.2 → 30.0.16248370 (LTS),
     build-tools 36.0.0 → 37.0.0, CI JDK 21 → 25 (Temurin LTS); Kotlin 2.4.21, Compose BOM 2026.09.00, Billing 9.1.0,

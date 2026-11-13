@@ -67,6 +67,8 @@ object Audio {
 
     fun play(name: String, volume: Float = 1f, pitch: Float = 1f, bus: Bus = Bus.Sfx) {
         tap?.invoke(name, volume, pitch)
+        // Android 17 (API 37) arka plan ses sertleştirmesi: görünür etkinlik yokken çalma sessizce yutulur; hiç denenmez
+        if (!foreground) return
         val p = pool ?: return
         val id = ids[name] ?: return
         val mix = MIX[name] ?: DEFAULT_MIX

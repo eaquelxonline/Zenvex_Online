@@ -9,15 +9,15 @@ plugins {
 
 android {
     namespace = "com.zenvex.online"
-    // Android 9 (API 28) ve sonrası; Android 16 (API 36) hedeflenir, Android 17 (API 37) cihazlarda da çalışır
-    // Android 17 (API 37) SDK'sıyla derlenir (güncel Compose bunu ister); davranış hedefi Android 16 (API 36)
+    // Android 8 (API 26) ve sonrası; Android 17 (API 37) SDK'sıyla derlenir ve Android 17 davranışları hedeflenir
+    // (oyun kategorisi: büyük ekranda yatay kilit korunur; arka planda ses çalınmaz; CT ve ECH varsayılan açık)
     compileSdk = 37
     ndkVersion = "30.0.16248370"
 
     defaultConfig {
         applicationId = "com.zenvex.online"
         minSdk = 26
-        targetSdk = 36
+        targetSdk = 37
         versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
         versionName = System.getenv("VERSION_NAME") ?: "0.4.0-beta"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
@@ -82,7 +82,7 @@ android {
         noCompress += listOf("png", "wav", "webp", "ogg")
     }
     // yasal metinlerin tek kaynağı (zx-legal web sayfaları da aynı dosyayı okur): assets/legal.json olarak paketlenir
-    sourceSets.getByName("main").assets.srcDir(rootProject.file("../supabase/functions/zx-legal/content"))
+    sourceSets.getByName("main").assets.directories.add(rootProject.file("../supabase/functions/zx-legal/content").path)
 }
 
 // yayın derlemesinde künye/aydınlatma bilgileri doldurulmamışsa uyar (mağazaya bu hâliyle çıkılmamalı)

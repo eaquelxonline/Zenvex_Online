@@ -4,7 +4,6 @@
         <item name="android:windowBackground">@color/bg</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
-        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
     <color name="bg">#172238</color>
 </resources>

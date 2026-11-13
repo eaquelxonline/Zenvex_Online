@@ -1,5 +1,7 @@
 package com.zenvex.online.ui
 
+import android.annotation.SuppressLint
+import android.os.Build
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -92,7 +94,7 @@ fun LiveScene(
     val fx = Settings.current.fx
     val ctx = LocalContext.current
     // GPU gölgelendiricileri (Android 13+); en düşük efekt ayarında ve eski cihazlarda yol çizimi
-    val shaders = remember { SceneShaders.create() }
+    val shaders = remember { if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) SceneShaders.create() else null }
     // oyunun kendi zombileri (yan görünüm yürüme kareleri; sola, kamp ateşine doğru yürürler)
     val zombies = remember {
         SCENE_ZOMBIES.map { (id, _) -> (0 until 8).mapNotNull { runCatching { SpriteCache.get(ctx, "z/$id/walk_0_$it") }.getOrNull() } }
@@ -479,6 +481,8 @@ private fun DrawScope.drawLight(l: FloatArray, offX: Float, t: Float, k: SceneKi
     }
 }
 
+// `sh` (SceneShaders) yalnız Android 13+ (API 33) cihazlarda null olmayan değer alır (bkz. SceneShaders.create)
+@SuppressLint("NewApi")
 private fun DrawScope.drawScene(w: World, k: SceneKind, t: Float, fx: Int, zombies: List<List<ImageBitmap>> = emptyList(), car: SceneCar? = null, sh: SceneShaders? = null) {
     val W = size.width; val H = size.height
     if (W < 16f || H < 16f) return
@@ -703,6 +707,8 @@ private fun DrawScope.drawZombie(x: Float, y: Float, hgt: Float, ph: Float, col:
     drawLine(col, Offset(x + lean * 0.6f, bodyTop + hgt * 0.20f), Offset(x + hgt * 0.27f, bodyTop + hgt * 0.30f - sw * 0.4f), hgt * 0.05f)
 }
 
+// `sh` (SceneShaders) yalnız Android 13+ (API 33) cihazlarda null olmayan değer alır (bkz. SceneShaders.create)
+@SuppressLint("NewApi")
 private fun DrawScope.drawForeground(k: SceneKind, t: Float, W: Float, H: Float, groundTop: Float, fx: Int, car: SceneCar? = null, sh: SceneShaders? = null) {
     val dark = Color(0xFF07050A)
     val fx0 = W * 0.30f; val fy0 = H * 0.93f

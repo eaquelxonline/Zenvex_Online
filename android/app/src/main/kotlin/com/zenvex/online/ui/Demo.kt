@@ -8,7 +8,9 @@ import android.util.Log
 import android.view.PixelCopy
 import java.io.File
 import kotlin.coroutines.resume
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 
 /**
  * Otomatik gösterim (yalnız test): oyunu açıp ekranları sırayla gezer ve her birinin görüntüsünü kaydeder.
@@ -33,7 +35,8 @@ object Demo {
             PixelCopy.request(act.window, bmp, { r -> c.resume(r == PixelCopy.SUCCESS) }, Handler(thread.looper))
         }
         if (!ok) { Log.w("ZXDEMO", "shot failed $name"); return }
-        File(dir(act), "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        // PNG sıkıştırma ana iş parçacığında yapılmaz
+        withContext(Dispatchers.IO) { File(dir(act), "$name.png").outputStream().use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) } }
         Log.i("ZXDEMO", "shot $name")
     }
 
