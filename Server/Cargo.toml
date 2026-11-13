@@ -1,0 +1,31 @@
+# Zenvex Online — isteğe bağlı gerçek zamanlı oyun sunucusu (tek dosya: Main.rs). WebSocket, odalar = bölgeler.
+# Kurulum: Install.sh (systemd + Caddy), güncelleme: Update.sh. Ayrıntı: Engineering.md › Oyun sunucusu.
+[package]
+name = "zenvex_server"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+license = "LicenseRef-Proprietary"
+publish = false
+
+[[bin]]
+name = "zenvex_server"
+path = "Main.rs"
+
+[dependencies]
+futures-util = "0.3.34"
+hex = "0.4.3"
+hmac = "0.13.0"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "json"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "signal"] }
+tokio-tungstenite = "0.30.0"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

@@ -1,0 +1,6 @@
+# Sabitlenmiş, doğrulanmış araç zinciri (kararlı 1.100.0, 2026-11-09).
+[toolchain]
+channel = "1.100.0"
+profile = "minimal"
+components = ["clippy", "rustfmt"]
+targets = ["aarch64-linux-android", "armv7-linux-androideabi", "x86_64-linux-android"]

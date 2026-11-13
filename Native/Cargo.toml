@@ -1,0 +1,39 @@
+# Zenvex Online — Rust oyun çekirdeği (tek dosya: Core.rs). Android'e libzenvex.so olarak girer (cargo-ndk).
+# Oyun kuralları ve dünya (kök), 3B çizici (`r3d`) ve JNI köprüsü (`bridge`) aynı crate'tedir.
+[package]
+name = "zenvex"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+license = "LicenseRef-Proprietary"
+publish = false
+
+[lib]
+name = "zenvex"
+path = "Core.rs"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+jni = "0.22.4"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+image = { version = "0.25.10", default-features = false, features = ["png", "webp"] }
+
+# Oyundaki tüm 3B modellerin yüklenip çizildiği bütünleşik test
+[[test]]
+name = "tests"
+path = "Tests.rs"
+
+# 3B önizleme / simge araçları (Tools/model3d): cargo run --release --example preview -- <alt komut> ...
+[[example]]
+name = "preview"
+path = "Preview.rs"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

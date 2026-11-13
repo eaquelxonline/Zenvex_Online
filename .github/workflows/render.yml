@@ -1,5 +1,5 @@
 # Karakter/zombi renderını 20 ücretsiz GitHub sunucusuna bölerek yapar (~20 kat hızlı), sonra paketleyip
-# android/app/src/main/assets/v2'yi günceller ve aynı dala commit'ler. Elle çalıştırılır: Actions → Render → Run workflow.
+# Android/Source/Main/Assets/v2'yi günceller ve aynı dala commit'ler. Elle çalıştırılır: Actions → Render → Run workflow.
 name: Render
 
 on:
@@ -34,7 +34,7 @@ jobs:
         run: |
           sudo apt-get install -y -q libxi6 libxxf86vm1 libxfixes3 libxrender1 libgl1 libsm6 > /dev/null
           pip install -q bpy==5.3.0 numpy pillow scikit-image
-          bash tools/blender/setup_mpfb.sh "$HOME/mh"
+          bash Tools/blender/setup_mpfb.sh "$HOME/mh"
       - name: Render (parça ${{ matrix.shard }}/20)
         env:
           ZX_SHARD: ${{ matrix.shard }}/20
@@ -42,8 +42,8 @@ jobs:
           ZX_WORK3: ${{ github.workspace }}/out
         run: |
           export MH_ROOT="$HOME/mh" MPFB_HOME="$HOME/mh/user"
-          python tools/blender/render_actors3.py ${{ inputs.groups }} 2>&1 | grep -v "^Fra\|Saved\|^\[" | tail -40
-          if [ "${{ matrix.shard }}" = "0" ]; then python tools/blender/render_items3.py icons equip 2>&1 | tail -3 || true; fi
+          python Tools/blender/render_actors3.py ${{ inputs.groups }} 2>&1 | grep -v "^Fra\|Saved\|^\[" | tail -40
+          if [ "${{ matrix.shard }}" = "0" ]; then python Tools/blender/render_items3.py icons equip 2>&1 | tail -3 || true; fi
       - uses: actions/upload-artifact@v7
         with:
           name: shard-${{ matrix.shard }}
@@ -82,15 +82,15 @@ jobs:
         env:
           ZX_WORK3: ${{ github.workspace }}/r3
         run: |
-          python tools/assetgen/fx_gen.py r3
-          mkdir -p base && cp -r tools/renders/base/* base/
-          python tools/assetgen/ground_tex.py base/ground
-          python tools/assetgen/pack.py base android/app/src/main/assets/v2
+          python Tools/assetgen/fx_gen.py r3
+          mkdir -p base && cp -r Tools/renders/base/* base/
+          python Tools/assetgen/ground_tex.py base/ground
+          python Tools/assetgen/pack.py base Android/Source/Main/Assets/v2
       - name: Commit
         run: |
           git config user.name "zenvex-render"
           git config user.email "render@users.noreply.github.com"
-          git add android/app/src/main/assets/v2
+          git add Android/Source/Main/Assets/v2
           git commit -m "Render: atlaslar güncellendi" || exit 0
           git push
       - name: APK derlemesini başlat

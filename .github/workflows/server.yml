@@ -1,12 +1,11 @@
-# Oyun sunucusu (rust/zenvex_server): Linux x86_64 ve ARM64 (Oracle Cloud Ampere gibi) için derler, kurulum
+# Oyun sunucusu (Server/Main.rs): Linux x86_64 ve ARM64 (Oracle Cloud Ampere gibi) için derler, kurulum
 # betikleriyle birlikte paketler. Çıktı: Actions → bu iş → Artifacts → zenvex-server-<mimari>.tar.gz
 name: Oyun Sunucusu
 
 on:
   push:
     paths:
-      - "rust/**"
-      - "deploy/**"
+      - "Server/**"
       - ".github/workflows/server.yml"
   workflow_dispatch:
 
@@ -28,18 +27,18 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: rust
+          workspaces: Server
       # sıfır uyarı: Rust tarafında tek bir clippy uyarısı bile derlemeyi durdurur
       - name: Clippy
-        working-directory: rust
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        working-directory: Server
+        run: cargo clippy --all-targets --locked -- -D warnings
       - name: Test ve derle
-        working-directory: rust
+        working-directory: Server
         run: |
-          cargo test -p zenvex_server --release
-          cargo build -p zenvex_server --release
+          cargo test --release --locked
+          cargo build --release --locked
       - name: Yük testi (100 bot)
-        working-directory: rust
+        working-directory: Server
         run: |
           ALLOW_GUESTS=1 BIND=127.0.0.1:7790 HEALTH_BIND=127.0.0.1:7791 ./target/release/zenvex_server &
           sleep 1
@@ -48,7 +47,7 @@ jobs:
       - name: Paketle
         run: |
           mkdir -p dist/zenvex-server
-          cp rust/target/release/zenvex_server deploy/install.sh deploy/update.sh deploy/zenvex-server.service dist/zenvex-server/
+          cp Server/target/release/zenvex_server Server/Install.sh Server/Update.sh Server/zenvex-server.service dist/zenvex-server/
           tar -C dist -czf zenvex-server-${{ matrix.arch }}.tar.gz zenvex-server
       - uses: actions/upload-artifact@v7
         with:

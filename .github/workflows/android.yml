@@ -1,4 +1,4 @@
-# Her push'ta: Android APK derlemesi (test yok — testleri oyuncu telefonda yapar).
+# Her push'ta: Rust clippy + çekirdek testleri, ardından Android APK / AAB derlemesi.
 # APK, GitHub'da "Releases" sayfasına "latest" etiketiyle yüklenir -> telefondan indirip kurabilirsin.
 name: Android APK
 
@@ -29,8 +29,8 @@ jobs:
 
       - name: Android NDK kur
         run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;${NDK_VERSION}" "platforms;android-37.0" "build-tools;37.0.0" > /dev/null
+          yes | "$ANDROID_HOME/cmdline-Tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-Tools/latest/bin/sdkmanager" "ndk;${NDK_VERSION}" "platforms;android-37.0" "build-tools;37.0.0" > /dev/null
           echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
 
       - uses: dtolnay/rust-toolchain@stable
@@ -39,7 +39,7 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: rust
+          workspaces: Native
 
       - name: cargo-ndk kur
         run: cargo install cargo-ndk --locked
@@ -57,7 +57,6 @@ jobs:
           fi
 
       - name: APK derle
-        working-directory: android
         env:
           ZENVEX_STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           ZENVEX_KEY_ALIAS: ${{ secrets.STORE_KEY_ALIAS }}
@@ -69,12 +68,13 @@ jobs:
           SB_KEY: ${{ secrets.SB_KEY }}
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
         run: |
-          ./gradlew assembleRelease assembleDebug bundleRelease --console=plain
-          mkdir -p ../dist ../dist-debug
-          cp app/build/outputs/apk/release/app-release.apk ../dist/ZenvexOnline-0.4.${{ github.run_number }}-beta.apk
-          cp app/build/outputs/bundle/release/app-release.aab ../dist/ZenvexOnline-0.4.${{ github.run_number }}-beta.aab
+          # Rust: clippy (uyarı = hata) ve çekirdek testleri; ardından APK / AAB
+          ./gradlew nativeLint nativeTest :Android:assembleRelease :Android:assembleDebug :Android:bundleRelease --console=plain
+          mkdir -p dist dist-debug
+          cp Android/build/outputs/apk/release/Android-release.apk dist/ZenvexOnline-0.4.${{ github.run_number }}-beta.apk
+          cp Android/build/outputs/bundle/release/Android-release.aab dist/ZenvexOnline-0.4.${{ github.run_number }}-beta.aab
           # emülatör testi: otomatik gösterim yalnız hata ayıklama sürümünde çalışır (yayın sürümü çevrimdışı oynatmaz)
-          cp app/build/outputs/apk/debug/app-debug.apk ../dist-debug/ZenvexOnline-debug.apk
+          cp Android/build/outputs/apk/debug/Android-debug.apk dist-debug/ZenvexOnline-debug.apk
 
       - uses: actions/upload-artifact@v7
         with:
@@ -107,7 +107,7 @@ jobs:
           prerelease: true
           makeLatest: true
 
-  # Emülatörde uygulamayı açıp ekranları gezer (Demo.kt); görüntüler + logcat "ui-shots" olarak yüklenir.
+  # Emülatörde uygulamayı açıp ekranları gezer (Core.kt › ui/Demo.kt); görüntüler + logcat "ui-shots" olarak yüklenir.
   ui-test:
     needs: build
     runs-on: ubuntu-latest

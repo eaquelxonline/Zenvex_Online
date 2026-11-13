@@ -2,7 +2,7 @@
 
 ## How it was tested
 
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`
+- [ ] `./gradlew check` (Rust clippy with warnings as errors + tests, core and server)
 - [ ] Kotlin compiles without warnings; UI snapshots updated if the UI changed
-- [ ] New visible text goes through `tools/i18n` (all languages complete)
+- [ ] New visible text goes through `Tools/i18n` (all languages complete)
 - [ ] Server-side checks for anything that grants items, gold or gems

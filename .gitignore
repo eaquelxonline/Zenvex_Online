@@ -1,18 +1,70 @@
-rust/target/
-android/.gradle/
-android/build/
-android/app/build/
-android/local.properties
-android/app/src/main/jniLibs/
-android/.kotlin/
+# ---------------------------------------------------------------
+# Zenvex Online — .gitignore
+# Platformlar: Android (arm64-v8a, armeabi-v7a, x86_64), Linux sunucu
+# Derleme: Gradle (Kotlin DSL), Cargo
+# ---------------------------------------------------------------
+
+# --- Gradle ---
+.gradle/
+build/
+**/build/
+local.properties
+supabase.properties
+# Gradle sarmalayıcısı izlenir (tekrarlanabilir derleme)
+!Gradle/gradle-wrapper.jar
+!Gradle/gradle-wrapper.properties
+
+# --- Kotlin ---
+.kotlin/
+*.class
+
+# --- Android ---
+.cxx/
+captures/
+*.apk
+*.aab
+output-metadata.json
+# testlerin ürettiği kayıt dosyası
+Android/save_*.json
+# oyun ekranı referans görüntüleri yerel (büyük; CI'da karşılaştırılmaz)
+Android/Source/Test/snapshots/images/*GameShotsTest*
+
+# --- Rust / Cargo ---
+# Cargo.lock bilinçli olarak izlenir (uygulama ikilisi, tekrarlanabilir derleme)
+Native/target/
+Server/target/
+target/
+**/*.rs.bk
+
+# --- Yerel derleme çıktıları ---
+*.so
+*.o
+*.raw
+
+# --- İmza ve gizli bilgiler (asla commit'lenmez) ---
+# İstisna: ortak geliştirme anahtarı bilinçli olarak depodadır (sürümler üst üste kurulabilsin; mağaza anahtarı gizli)
+*.jks
+!Android/zenvex-dev.jks
+*.keystore
+*.p12
+*.pem
+keystore.properties
+.env
+.env.*
+firebase.properties
+
+# --- Araçlar ---
 __pycache__/
 *.pyc
 dist/
-android/firebase.properties
-*.raw
-android/app/src/test/snapshots/images/*GameShotsTest*
-tools/i18n/missing_*.json
+Tools/i18n/missing_*.json
+# tanıtım videosu: Tools/promo/edit.py ile üretilir (büyük ikili dosya)
+Art/promo/*.mp4
+Art/items/
 
-# tanıtım videosu: tools/promo/edit.py ile üretilir (büyük ikili dosya; depoya konmaz)
-art/promo/*.mp4
-art/items/
+# --- IDE / OS ---
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
