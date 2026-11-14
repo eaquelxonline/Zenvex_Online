@@ -779,7 +779,7 @@ class Sprite(val page: Int, val src: AndroidRect, val ax: Float, val ay: Float, 
 }
 
 /** Hep bellekte kalan atlas grupları (oyunun her yerinde çizilir) */
-private val KEEP = setOf("world", "props", "items", "npc6", "npcs", "vehicles", "regions", "fx", "fx7")
+private val KEEP = setOf("world", "props", "items", "npc6", "npcs", "vehicles", "regions")
 
 /**
  * tools/assetgen/pack.py çıktısı (assets/v2). Sayfalar gruplar halinde tembel yüklenir;

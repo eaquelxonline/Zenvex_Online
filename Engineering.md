@@ -205,7 +205,7 @@ M5 (karakter kimlikleri): `data.rs` CHAR_BASE (Kael hız/kaçınma, Lyra kritik/
 ### 5. Üretim (Supabase) durumu
 - Uygulandı: göçler V20'ye kadar, `v20_fixes` (zx_photos, set_level/set_char_level, zx_save3 admin_level izni, zx_admin_support photos);
   edge `zx-support` v2 (id 0 düzeltmesi) dağıtıldı.
-- BEKLEYEN (hiçbiri uygulanmadı):
+- BEKLEYEN (hiçbiri uygulanmadı; V22'den beri `20261125_v22_cleanup.sql` de bu listede):
   - `20261124_v21_fixes.sql` (yönetici etkinlik sıralaması) — kullanıcı onayıyla uygula.
   - `20261122_legal_compliance.sql` + `zx-legal` edge fonksiyonu — kullanıcıya sormadan uygulama (kural).
   - `20261120_trade_expect.sql`.
@@ -1724,6 +1724,25 @@ design. Release signing uses separate secrets.
 ## 21. Sürüm geçmişi
 
 ### Unreleased (V16 — 3D)
+
+- V22 asset cleanup (picked in the asset catalog; every removed asset takes its feature with it):
+  - zombies: the classic walker, runner, dog and toxic looks are gone; those roles now always spawn as the area's own
+    creatures (only the dark and tank zombies keep a classic look). The mystery zombie, the desert scorpion, the Titan
+    (with its Magma form, boss phases, shockwave, map marker, "Titan'ın Sonu" quest, weekly/season Titan quests, the
+    "Efsane" milestone, the Titan Hunt event and the Titan leaderboard) are removed
+  - personal-base storage chests are removed: chests in old saves are emptied into the bag on load (what does not fit,
+    and the chest itself, is paid out in gold); chest recipes, caravan stock and store/crate/pass rewards changed
+  - the Character Card item is retired (cards in a bag are paid out as gold); season-pass card and chest rewards became
+    gems (10 per card, 15 per iron chest, 30 per military chest): free track 360, premium 1,610 gems
+  - world objects removed: camp fire, camp and city walls and gate, houses and apartments, merchant stall, kennel,
+    gas station, tents and field hospital, watchtower, street lamps, barrels, wrecks, some tree variants and
+    decorations; they leave an invisible, non-blocking placeholder so the rest of the world is laid out as before
+  - 21 sound effects (hits, groans, deaths, reload, heal, shield, …), the commander portrait, the level 5/10 dog
+    looks, the old 2D soldier/sniper and vehicle frames (3D models are used) and the unused effect definitions removed
+  - the lobby, loading and connection screens show the Blood Moon event art instead of the animated city scene
+  - atlas repacked: 1,068 frames removed, 50 → 29 pages, 32 → 20 MB
+  - server migration `20261125_v22_cleanup.sql` (store packs, Diamond Crate prize, pass gem table) must be applied
+    together with this build
 
 - V22 minimal file structure (same layout as Freedom Network):
   - Gradle root at the repository root (`settings.gradle.kts`, `build.gradle.kts`, wrapper under `Gradle/` with a pinned
