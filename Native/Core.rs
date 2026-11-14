@@ -1273,7 +1273,7 @@ pub mod data {
     pub const ITEMS: &[ItemDef] = &[
         // malzemeler (0-14)
         item!("wood", "Odun", Material, Common, 50, 2, "Ağaç kesince düşer. Balta, kazma, sandık ve tezgâh yapımında kullanılır."),
-        item!("stone", "Taş", Material, Common, 50, 2, "Kaya kırınca düşer. Taş balta, taş kazma ve tezgâh yapımında kullanılır."),
+        item!("stone", "Taş", Material, Common, 50, 2, "Ağaç kesince kök toprağından düşer. Taş balta yapımında kullanılır."),
         item!("cloth", "Kumaş", Material, Common, 50, 4, "Zombilerden ve sandıklardan düşer. Bandaj, yelek, pantolon ve çanta yapımında kullanılır."),
         item!("glue", "Yapıştırıcı", Material, Common, 50, 6, "Reçineden üretilir. Birçok tarifte gerekir."),
         item!("resin", "Reçine", Material, Common, 50, 3, "Çam ağaçlarından damlar. Bandaj, Can İksiri ve Panzehir yapımında kullanılır."),
@@ -1430,7 +1430,7 @@ pub mod data {
     pub fn item_source(id: &str) -> &'static str {
         match id {
             "wood" => "Ağaç kes (balta ile hızlı)",
-            "stone" => "Kaya kır (kazma ile hızlı)",
+            "stone" => "Ağaç kes (devrilen ağaçtan düşer)",
             "cloth" => "Zombiler, sandıklar, tüccar",
             "leather" => "Köpek zombiler, sandıklar",
             "scrap" => "Tank zombiler, kayalar, sandıklar",
@@ -1482,7 +1482,9 @@ pub mod data {
         // V17: El Baltası kalktı (Taş Balta ile karışıyordu); elde olan bıçağa döner (RETIRE_INTO)
         "w_hatchet",
         // V22: Karakter Kartı eşyası ve kişisel üs depo sandıkları kalktı (kartlar sandıklardan gelmeye devam eder)
-        "char_card", "chest_wood", "chest_iron", "chest_military"];
+        "char_card", "chest_wood", "chest_iron", "chest_military",
+        // V22: kayalar (kazma), tezgâh ve çantalar kalktı; tüm tarifler elde üretilir, çantanın bütün bölmeleri açık
+        "t_pick_stone", "t_pick_iron", "workbench", "bag_basic", "bag_police", "bag_military"];
 
     /// V15: oyundan kalkan eşyanın altın karşılığı (değerinin 2 katı; değeri olmayan etkinlik kaskı ve pelerin sabit)
     pub fn retired_refund(id: &str) -> u32 {
@@ -2138,78 +2140,71 @@ pub mod data {
         pub out: &'static str,
         pub count: u16,
         pub inputs: &'static [(&'static str, u16)],
-        pub bench: bool,
     }
 
     /// V12.1: her tarif tek (aynı eşyanın ikinci tarifi yok). El üretimi (bench: false) yalnız temel malzemeler ve
     /// Başlangıç Ormanı eşyalarıyla; tezgâh tarifleri (bench: true) bölgelere özel malzemeler ister. El üretimi ekranında
     /// tezgâh tarifleri görünmez, tezgâhta da el tarifleri.
     macro_rules! r {
-        ($out:expr, $n:expr, [$(($i:expr, $c:expr)),*], $bench:expr) => {
-            Recipe { out: $out, count: $n, inputs: &[$(($i, $c)),*], bench: $bench }
+        ($out:expr, $n:expr, [$(($i:expr, $c:expr)),*]) => {
+            Recipe { out: $out, count: $n, inputs: &[$(($i, $c)),*] }
         };
     }
 
     pub const RECIPES: &[Recipe] = &[
         // ---- el üretimi: temel (odun, taş, kumaş, deri, hurda, kemik) + orman (reçine, ip)
-        r!("bandage", 1, [("cloth", 2), ("resin", 1)], false),
-        r!("potion_heal", 1, [("bandage", 1), ("resin", 2)], false),
-        r!("w_knife", 1, [("scrap", 3), ("leather", 1), ("rope", 1)], false),
-        r!("w_bat", 1, [("wood", 8), ("scrap", 2)], false),
-        r!("t_axe_stone", 1, [("wood", 6), ("stone", 4), ("rope", 1)], false),
-        r!("t_pick_stone", 1, [("wood", 6), ("stone", 6), ("rope", 1)], false),
-        r!("helm_basic", 1, [("scrap", 4), ("leather", 1), ("cloth", 1)], false),
-        r!("jacket_basic", 1, [("cloth", 6), ("leather", 2)], false),
-        r!("pants_basic", 1, [("cloth", 5), ("leather", 1)], false),
-        r!("boots_basic", 1, [("leather", 3), ("cloth", 2)], false),
-        r!("bag_basic", 1, [("cloth", 6), ("leather", 2), ("rope", 2)], false),
-        r!("ring_copper", 1, [("scrap", 3), ("bone", 2)], false),
-        r!("neck_bone", 1, [("bone", 6), ("rope", 1)], false),
-        r!("workbench", 1, [("wood", 20), ("stone", 10), ("scrap", 4), ("rope", 2)], false),
+        r!("bandage", 1, [("cloth", 2), ("resin", 1)]),
+        r!("potion_heal", 1, [("bandage", 1), ("resin", 2)]),
+        r!("w_knife", 1, [("scrap", 3), ("leather", 1), ("rope", 1)]),
+        r!("w_bat", 1, [("wood", 8), ("scrap", 2)]),
+        r!("t_axe_stone", 1, [("wood", 6), ("stone", 4), ("rope", 1)]),
+        r!("helm_basic", 1, [("scrap", 4), ("leather", 1), ("cloth", 1)]),
+        r!("jacket_basic", 1, [("cloth", 6), ("leather", 2)]),
+        r!("pants_basic", 1, [("cloth", 5), ("leather", 1)]),
+        r!("boots_basic", 1, [("leather", 3), ("cloth", 2)]),
+        r!("ring_copper", 1, [("scrap", 3), ("bone", 2)]),
+        r!("neck_bone", 1, [("bone", 6), ("rope", 1)]),
         // ---- tezgâh: şifa ve iksir
-        r!("medkit", 2, [("bandage", 2), ("swamp_moss", 1), ("dried_hide", 1)], true),
-        r!("antidote", 1, [("toxic", 2), ("resin", 1)], true),
-        r!("potion_speed", 2, [("scorpion_venom", 1), ("scorched_resin", 2)], true),
-        r!("potion_power", 2, [("charcoal", 3), ("powder_pouch", 1)], true),
+        r!("medkit", 2, [("bandage", 2), ("swamp_moss", 1), ("dried_hide", 1)]),
+        r!("antidote", 1, [("toxic", 2), ("resin", 1)]),
+        r!("potion_speed", 2, [("scorpion_venom", 1), ("scorched_resin", 2)]),
+        r!("potion_power", 2, [("charcoal", 3), ("powder_pouch", 1)]),
         // ---- tezgâh: silah ve alet
-        r!("w_katana", 1, [("scrap", 10), ("leather", 2), ("bog_iron", 2), ("dark_crystal", 1)], true),
-        r!("w_handaxe", 1, [("wood", 4), ("scrap", 10), ("leather", 2), ("gear", 1)], true),
-        r!("w_effigy", 1, [("stone", 30), ("dark_crystal", 2), ("bone", 10)], true),
-        r!("w_glock", 1, [("scrap", 12), ("gear", 2), ("leather", 1)], true),
-        r!("t_axe_iron", 1, [("wood", 4), ("scrap", 8), ("leather", 1), ("gear", 1)], true),
-        r!("t_pick_iron", 1, [("wood", 4), ("scrap", 10), ("leather", 1), ("gear", 1)], true),
+        r!("w_katana", 1, [("scrap", 10), ("leather", 2), ("bog_iron", 2), ("dark_crystal", 1)]),
+        r!("w_handaxe", 1, [("wood", 4), ("scrap", 10), ("leather", 2), ("gear", 1)]),
+        r!("w_effigy", 1, [("stone", 30), ("dark_crystal", 2), ("bone", 10)]),
+        r!("w_glock", 1, [("scrap", 12), ("gear", 2), ("leather", 1)]),
+        r!("t_axe_iron", 1, [("wood", 4), ("scrap", 8), ("leather", 1), ("gear", 1)]),
         // ---- tezgâh: ateşli silahlar (etkinlik silahları hariç her silah tezgâhta yapılır)
-        r!("w_uzi", 1, [("scrap", 20), ("gear", 4), ("electronics", 2), ("battery", 1)], true),
-        r!("w_ak47", 1, [("scrap", 28), ("gear", 5), ("leather", 2), ("bog_iron", 3), ("circuit_board", 1)], true),
-        r!("w_sniper", 1, [("scrap", 24), ("gear", 6), ("circuit_board", 2), ("dark_crystal", 2), ("ice_shard", 2)], true),
-        r!("w_rpg", 1, [("scrap", 40), ("gear", 8), ("powder_pouch", 4), ("circuit_board", 3), ("titan_shard", 3)], true),
+        r!("w_uzi", 1, [("scrap", 20), ("gear", 4), ("electronics", 2), ("battery", 1)]),
+        r!("w_ak47", 1, [("scrap", 28), ("gear", 5), ("leather", 2), ("bog_iron", 3), ("circuit_board", 1)]),
+        r!("w_sniper", 1, [("scrap", 24), ("gear", 6), ("circuit_board", 2), ("dark_crystal", 2), ("ice_shard", 2)]),
+        r!("w_rpg", 1, [("scrap", 40), ("gear", 8), ("powder_pouch", 4), ("circuit_board", 3), ("titan_shard", 3)]),
         // ---- tezgâh: polis takımı (şehir + çöl)
-        r!("helm_police", 1, [("scrap", 8), ("leather", 2), ("gear", 1)], true),
-        r!("jacket_police", 1, [("cloth", 10), ("leather", 4), ("dried_hide", 2)], true),
-        r!("pants_police", 1, [("cloth", 8), ("leather", 3), ("dried_hide", 1)], true),
-        r!("boots_police", 1, [("leather", 6), ("dried_hide", 2), ("scrap", 2)], true),
-        r!("bag_police", 1, [("cloth", 10), ("leather", 6), ("rope", 4), ("battery", 1)], true),
+        r!("helm_police", 1, [("scrap", 8), ("leather", 2), ("gear", 1)]),
+        r!("jacket_police", 1, [("cloth", 10), ("leather", 4), ("dried_hide", 2)]),
+        r!("pants_police", 1, [("cloth", 8), ("leather", 3), ("dried_hide", 1)]),
+        r!("boots_police", 1, [("leather", 6), ("dried_hide", 2), ("scrap", 2)]),
         // ---- tezgâh: askerî takım (bataklık + liman + cephe)
-        r!("helm_military", 1, [("scrap", 14), ("bog_iron", 3), ("circuit_board", 1)], true),
-        r!("jacket_military", 1, [("cloth", 14), ("scrap", 8), ("ice_shard", 2), ("circuit_board", 1)], true),
-        r!("pants_military", 1, [("cloth", 12), ("bog_iron", 2), ("ice_shard", 1)], true),
-        r!("boots_military", 1, [("leather", 8), ("bog_iron", 2), ("scorched_resin", 2)], true),
-        r!("bag_military", 1, [("cloth", 16), ("leather", 10), ("rope", 6), ("ice_shard", 2)], true),
+        r!("helm_military", 1, [("scrap", 14), ("bog_iron", 3), ("circuit_board", 1)]),
+        r!("jacket_military", 1, [("cloth", 14), ("scrap", 8), ("ice_shard", 2), ("circuit_board", 1)]),
+        r!("pants_military", 1, [("cloth", 12), ("bog_iron", 2), ("ice_shard", 1)]),
+        r!("boots_military", 1, [("leather", 8), ("bog_iron", 2), ("scorched_resin", 2)]),
         // ---- tezgâh: Titan takımı (Titan + liman)
-        r!("helm_titan", 1, [("titan_shard", 3), ("scrap", 20), ("dark_crystal", 2)], true),
-        r!("jacket_titan", 1, [("titan_shard", 4), ("leather", 12), ("dark_crystal", 2)], true),
-        r!("pants_titan", 1, [("titan_shard", 3), ("cloth", 12), ("dark_crystal", 1)], true),
-        r!("boots_titan", 1, [("titan_shard", 2), ("leather", 10), ("dark_crystal", 1)], true),
+        r!("helm_titan", 1, [("titan_shard", 3), ("scrap", 20), ("dark_crystal", 2)]),
+        r!("jacket_titan", 1, [("titan_shard", 4), ("leather", 12), ("dark_crystal", 2)]),
+        r!("pants_titan", 1, [("titan_shard", 3), ("cloth", 12), ("dark_crystal", 1)]),
+        r!("boots_titan", 1, [("titan_shard", 2), ("leather", 10), ("dark_crystal", 1)]),
         // ---- tezgâh: takı
-        r!("ring_hunter", 1, [("gold_watch", 1), ("bog_iron", 2)], true),
-        r!("ring_titan", 1, [("titan_shard", 2), ("dark_crystal", 2), ("gold_watch", 1)], true),
-        r!("neck_amulet", 1, [("ice_shard", 3), ("swamp_moss", 2)], true),
-        r!("neck_dark", 1, [("dark_crystal", 3), ("bone", 10), ("ice_shard", 2)], true),
+        r!("ring_hunter", 1, [("gold_watch", 1), ("bog_iron", 2)]),
+        r!("ring_titan", 1, [("titan_shard", 2), ("dark_crystal", 2), ("gold_watch", 1)]),
+        r!("neck_amulet", 1, [("ice_shard", 3), ("swamp_moss", 2)]),
+        r!("neck_dark", 1, [("dark_crystal", 3), ("bone", 10), ("ice_shard", 2)]),
         // ---- tezgâh: araç parçaları
-        r!("v_wheel", 1, [("scrap", 4), ("leather", 2), ("rope", 1)], true),
-        r!("v_engine", 1, [("scrap", 10), ("gear", 4), ("electronics", 2), ("fuel", 2)], true),
-        r!("v_frame_moto", 1, [("scrap", 12), ("gear", 1), ("leather", 2)], true),
-        r!("v_frame_car", 1, [("scrap", 30), ("gear", 3), ("battery", 1), ("bog_iron", 2)], true),
+        r!("v_wheel", 1, [("scrap", 4), ("leather", 2), ("rope", 1)]),
+        r!("v_engine", 1, [("scrap", 10), ("gear", 4), ("electronics", 2), ("fuel", 2)]),
+        r!("v_frame_moto", 1, [("scrap", 12), ("gear", 1), ("leather", 2)]),
+        r!("v_frame_car", 1, [("scrap", 30), ("gear", 3), ("battery", 1), ("bog_iron", 2)]),
         // ---- tezgâh: üs
     ];
 
@@ -2624,15 +2619,6 @@ pub mod data {
             gold: 100,
             xp: 200,
             pass_xp: 250,
-        },
-        QuestDef {
-            id: "d_mine",
-            title: "12 kaya kır",
-            kind: QuestKind::Mine,
-            goal: 12,
-            gold: 90,
-            xp: 150,
-            pass_xp: 200,
         },
     ];
 
@@ -3414,8 +3400,6 @@ pub mod game {
         pub base_clock: f64,
         /// büyücü ışınlanma bekleme süresi
         pub wiz_cd: f32,
-        /// V12.1: dışarıda kurulan geçici tezgâh (x, y, kalan sn)
-        pub temp_benches: Vec<(f32, f32, f32)>,
         /// V12.2: bölgelerin gezgin tüccar kamyonetleri
         pub caravans: Vec<crate::caravan::Caravan>,
         /// V11 eğitim üssü öğreticisi: 0 kapalı, 1 çatışma, 2 bomba düşüyor, 3 patladı (bkz. training.rs)
@@ -3587,7 +3571,6 @@ pub mod game {
                 my_clan: 0,
                 base_clock: 0.0,
                 wiz_cd: 0.0,
-                temp_benches: Vec::new(),
                 caravans,
                 xp_warn_t: -999.0,
                 train: 0,
@@ -3712,7 +3695,6 @@ pub mod game {
             self.update_bases(dt);
             self.update_training(dt);
             self.wiz_cd = (self.wiz_cd - dt).max(0.0);
-            self.update_benches(dt);
             self.update_caravans();
         }
 
@@ -5875,9 +5857,6 @@ pub mod progress {
         pub chests: Vec<crate::chests::LegacyChest>,
         /// V8: ölünce kişisel üste doğ (büyücüden seçilir)
         pub home_spawn: bool,
-        /// V12.1: kişisel üste kurulan kalıcı tezgâhlar (dünya pikseli)
-        #[serde(default)]
-        pub benches: Vec<(f32, f32)>,
         /// V12.2: gezgin tüccardan bu gelişte alınanlar (dilim, bölge, havuz sırası, adet)
         #[serde(default)]
         pub caravan_bought: Vec<(i64, u8, u16, u32)>,
@@ -6055,7 +6034,6 @@ pub mod progress {
                 story: Default::default(),
                 chests: Vec::new(),
                 home_spawn: false,
-                benches: Vec::new(),
                 caravan_bought: Vec::new(),
                 ev: EventStats::default(),
                 last_pos: None,
@@ -6181,17 +6159,10 @@ pub mod progress {
         }
 
         /// Bölme boyları: ana çanta + kuşanılan çantanın ek bölmeleri (en fazla 3).
+        /// V22: çantalar kalktı; ana bölmenin yanında bütün ek bölmeler herkese açık (eski Askerî Çanta kadar: 16'şar yuva)
         pub fn inv_pages(&self) -> Vec<usize> {
-            Self::pages_for(self.inventory_cap(), self.eq.def("bag"))
-        }
-
-        fn pages_for(main: usize, bag: Option<&data::ItemDef>) -> Vec<usize> {
-            let mut v = vec![main];
-            if let Some(b) = bag {
-                for _ in 0..(b.bonus as usize).min(crate::inventory::PAGES - 1) {
-                    v.push(b.armor as usize);
-                }
-            }
+            let mut v = vec![self.inventory_cap()];
+            v.extend(std::iter::repeat_n(16, crate::inventory::PAGES - 1));
             v
         }
 
@@ -6256,7 +6227,7 @@ pub mod progress {
                 }
             };
             strip(&mut self.inv.slots);
-            for slot in [&mut self.eq.weapon, &mut self.eq.helmet, &mut self.eq.cloak] {
+            for slot in [&mut self.eq.weapon, &mut self.eq.helmet, &mut self.eq.cloak, &mut self.eq.bag] {
                 if !slot.is_empty() && gone(slot) {
                     gold = gold.saturating_add(crate::data::retired_refund(slot));
                     slot.clear();
@@ -6350,15 +6321,6 @@ pub mod progress {
             self.bonus().dmg_taken
         }
 
-        /// Çanta değişince kapanacak ek bölmelerde eşya varsa izin verme.
-        fn bag_change_ok(&self, new_bag: Option<&data::ItemDef>) -> Result<(), &'static str> {
-            let keep = Self::pages_for(self.inventory_cap(), new_bag).len();
-            if (keep..self.inv.pages.len()).any(|p| self.inv.page_used(p) > 0) {
-                return Err("Önce kapanacak çanta bölmelerini boşalt");
-            }
-            Ok(())
-        }
-
         /// Envanterdeki slotu giy. Eskisini envantere geri koyar.
         pub fn equip_slot(&mut self, slot: usize) -> Result<&'static str, &'static str> {
             let s = self
@@ -6371,7 +6333,7 @@ pub mod progress {
             let def = &ITEMS[s.item as usize];
             let key = Equipment::key_for(def.kind).ok_or("Bu eşya giyilemez")?;
             if key == "bag" {
-                self.bag_change_ok(Some(def))?;
+                return Err("Çantalar oyundan kalktı: bütün bölmeler zaten açık");
             }
             let old_dur = self.eq.dur(key);
             let target = self.eq.get_mut(key).ok_or("Bu eşya giyilemez")?;
@@ -6416,9 +6378,6 @@ pub mod progress {
             let id = self.eq.get(which).ok_or("Geçersiz slot")?.clone();
             if id.is_empty() {
                 return Err("Zaten boş");
-            }
-            if which == "bag" {
-                self.bag_change_ok(None)?;
             }
             // çıkarınca sığacak mı (çanta çıkarılıyorsa yalnız ana bölme kalır)
             let room = if which == "bag" {
@@ -6752,32 +6711,6 @@ pub mod progress {
             assert!(p.unequip("necklace").is_err());
         }
 
-        #[test]
-        fn bag_opens_pages_and_guards_unequip() {
-            let mut p = Progress::default();
-            assert_eq!(p.inv.pages.len(), 1);
-            equip_id(&mut p, "bag_police").unwrap();
-            assert_eq!(p.inv.pages, vec![BASE_SLOTS as u16, 12, 12]);
-            // ek bölmeye eşya koy: çanta çıkarılamaz, küçük çantayla değiştirilemez
-            p.inv.add_id("wood", 1);
-            let w = p.inv.slots.iter().position(|s| s.is_some_and(|s| ITEMS[s.item as usize].id == "wood")).unwrap();
-            p.inv.move_to_page(w, 2).unwrap();
-            assert!(p.unequip("bag").is_err());
-            assert!(equip_id(&mut p, "bag_basic").is_err());
-            // boşaltınca olur; askerî çanta 3 bölme açar
-            let r = p.inv.page_range(2).unwrap();
-            for i in r {
-                p.inv.slots[i] = None;
-            }
-            let b = p.inv.slots.iter().position(|s| s.is_some_and(|s| ITEMS[s.item as usize].id == "bag_basic")).unwrap();
-            p.inv.slots[b] = None;
-            equip_id(&mut p, "bag_military").unwrap();
-            assert_eq!(p.inv.pages, vec![BASE_SLOTS as u16, 16, 16, 16]);
-            assert_eq!(p.inv.count_id("bag_police"), 1);
-            p.unequip("bag").unwrap();
-            assert_eq!(p.inv.pages.len(), 1);
-            assert_eq!(p.inv.count_id("bag_military"), 1);
-        }
 
         #[test]
         fn old_save_without_v8_fields_loads() {
@@ -6793,7 +6726,7 @@ pub mod progress {
             assert!(q.chests.is_empty() && q.eq.ring.is_empty());
             q.inv.migrate();
             q.relayout_inv();
-            assert_eq!(q.inv.pages, vec![BASE_SLOTS as u16]);
+            assert_eq!(q.inv.pages, [BASE_SLOTS as u16, 16, 16, 16]);
             assert_eq!(q.inv.count_id("wood"), 7);
         }
 
@@ -7586,16 +7519,6 @@ pub mod story {
             "Ağaç devrilince odun düşer; çamlardan reçine de çıkar. Odun üretimin temelidir."],
            "Gördün mü? Balta olunca iş hızlanıyor. Odun ve taş her zaman lazım olacak.",
            Goal::Chop, 1, 1, 15, 40, &[], &[]),
-        q!("g4d", N_GUIDE, "Taş Kazma", "Üret: 1 Taş Kazma",
-           ["Çantana odun, taş ve ip kondu. Aynı sekmeden Taş Kazma yap."],
-           "Kazma kayaya, balta ağaca. Basit ve etkili.",
-           Goal::Craft("t_pick_stone"), 1, 1, 15, 40, &[], &[("wood", 6), ("stone", 6), ("rope", 1)]),
-        q!("g4e", N_GUIDE, "Kaya Kır", "1 Kaya Kır",
-           ["Kayalar da odun kadar önemli: taş, tezgâh ve alet demek. Hepsinin 500 canı var.",
-            "Çantadan Taş Kazma'yı kuşan: alet yalnız elindeyken kayaya güçlü vurur. Sonra bir kayaya yürüyüp vurmaya devam et.",
-            "Kaya parçalanınca taş düşer; ara sıra hurda da çıkar. Hurda silah üretiminin temelidir."],
-           "Taş ve hurda: tezgâhın yakıtı. Sakın sıkılma, hepsi lazım olacak.",
-           Goal::Mine, 1, 1, 15, 40, &[], &[]),
         q!("g4f", N_GUIDE, "İlk Silah", "Üret: 1 Sopa",
            ["Yumruk ilk günler için yeter ama zombiler yenilenir. Gerçek bir silaha ihtiyacın var.",
             "Çantana odun ve hurda kondu. Silah Ve Alet sekmesinden Sopa yap: yavaş ama ağır vurur ve sersemletir."],
@@ -7610,11 +7533,6 @@ pub mod story {
             "Çantana basit bir kask ve ceket kondu. Çantayı aç, eşyaya dokun ve Kuşan'a bas; eşya sol taraftaki ekipman yuvasına oturur."],
            "Zırhın seni korur. Giydiğin eşyalar kullandıkça yıpranır; tezgâhta ya da Tamirci Viktor'da onarılır.",
            Goal::Wear, 2, 1, 15, 40, &[], &[("helm_basic", 1), ("jacket_basic", 1)]),
-        q!("g4i", N_GUIDE, "Tezgâh Kur", "Çantadaki Tezgâhı Yere Kur",
-           ["Gelişmiş eşyalar tezgâhta yapılır. Kampta bir tezgâh var ama kendi tezgâhını da kurabilirsin.",
-            "Çantana bir tezgâh kondu. Çantada tezgâha dokun, Kur'a bas ve yerde yeşil çıkan bir noktaya yerleştir."],
-           "Tezgâhın hazır. Yakınına gidince üretim ekranı açılır; çantaya geri alabilirsin.",
-           Goal::Ping("bench"), 1, 1, 15, 40, &[], &[("workbench", 1)]),
         q!("g5", N_GUIDE, "Cebini Hazırla", "Çantada Bir Eşyayı Cebe Sürükle",
            ["Savaşın ortasında çantayı açmaya vaktin olmaz.",
             "Çantayı aç, bir bandaja ya da iksire basılı tut ve soldaki ceplerden birine sürükle.",
@@ -8147,11 +8065,6 @@ pub mod story {
                 Goal::Loot => near(&mut self.drops.iter().map(|d| (d.x, d.y))).or_else(|| zombie(&|_| true)),
                 Goal::Chop => statics(world::Kind::Tree),
                 Goal::Mine => statics(world::Kind::Rock),
-                Goal::Craft(id) if crate::data::RECIPES.iter().any(|r| r.out == id && r.bench) => near(
-                    &mut self.world.statics.iter().filter(|s| s.kind == world::Kind::Bench).map(|s| (s.x, s.y))
-                        .chain(self.temp_benches.iter().map(|b| (b.0, b.1)))
-                        .chain(self.progress.benches.iter().copied()),
-                ),
                 Goal::Ping("sell") => npc(N_MERCHANT),
                 Goal::Ping("order") => npc(N_MECHANIC),
                 Goal::Ping("tp") => npc(N_WIZARD),
@@ -8183,7 +8096,6 @@ pub mod story {
                 // V19: üretim görevi: üretim ekranı istenen sekmeyi/tarifi/düğmeyi işaretler (el ya da tezgâh tarifi)
                 if let Goal::Craft(id) = q.goal {
                     v["craft"] = json!(id);
-                    v["bench"] = json!(crate::data::RECIPES.iter().any(|r| r.out == id && r.bench));
                 }
                 // kabul edilmemiş görev: veren NPC işaretlenir (seviye yetiyorsa)
                 let target = if on { self.quest_target(q, ready) } else if self.progress.level >= q.min_level { self.quest_target(q, true) } else { None };
@@ -9083,7 +8995,6 @@ pub mod ui {
     use crate::world;
     use serde_json::{json, Value};
 
-    const NEAR: f32 = 150.0;
     pub const DOCTOR_PRICE: u32 = 20;
     pub const MECHANIC_PRICE: u32 = 30;
 
@@ -9117,14 +9028,6 @@ pub mod ui {
     const HEAL_ITEM_CD: f32 = 4.0;
 
     impl Game {
-        pub fn near_bench(&self) -> bool {
-            let (px, py) = (self.player.x, self.player.y);
-            self.world
-                .benches
-                .iter()
-                .any(|&(x, y)| (x - px).hyp(y - py) < NEAR)
-                || self.near_placed_bench()
-        }
 
         /// V12.2: tüccar gezgin (caravan.rs); yalnız park etmiş kamyonetinin yanında alışveriş
         pub fn near_merchant(&self) -> bool {
@@ -9425,13 +9328,11 @@ pub mod ui {
                         "armor": g.armor(), "max_hp": g.max_hp(), "dmg": g.damage_mult(), "speed": g.move_mult(), "crit": g.crit_chance(),
                         "gold": g.gold, "gems": g.gems, "in_game_hp": self.player.hp,
                         "home": self.at_home(),
-                        "can_repair": self.near_bench() || self.near_npc(4),
+                        "can_repair": self.near_npc(4),
                     })
                 }
                 // V21: el üretimi ve tezgâh aynı tarif listesini (aynı malzemeler) gösterir; tezgâh tarifleri elde "tezgâh gerekli" olur
-                k if k == "craft" || k == "craft_bench" => {
-                    let mode_bench = k == "craft_bench";
-                    let bench = self.near_bench();
+                "craft" => {
                     let mut groups: Vec<(&str, Vec<Value>)> = Vec::new();
                     for (i, r) in RECIPES.iter().enumerate() {
                         let inputs: Vec<Value> = r
@@ -9443,7 +9344,7 @@ pub mod ui {
                         let has = r.inputs.iter().all(|(id, n)| g.inv.count_id(id) >= *n as u32);
                         // malzemelerin yettiği en çok üretim (çoklu üretim tuşları buna göre açılır)
                         let max = r.inputs.iter().map(|(id, n)| g.inv.count_id(id) / (*n as u32).max(1)).min().unwrap_or(0).min(50);
-                        let v = json!({ "i": i, "count": r.count, "inputs": inputs, "bench": r.bench, "can": has && (!r.bench || bench),
+                        let v = json!({ "i": i, "count": r.count, "inputs": inputs, "can": has,
                                         "max": max });
                         match groups.iter_mut().find(|(o, _)| *o == r.out) {
                             Some((_, vs)) => vs.push(v),
@@ -9458,11 +9359,7 @@ pub mod ui {
                                     "have": g.inv.count_id(out) })
                         })
                         .collect();
-                    let (px, py) = (self.player.x, self.player.y);
-                    let own = self.progress.benches.iter().any(|&(x, y)| (x - px).hyp(y - py) < crate::benches::BENCH_NEAR);
-                    let temp = self.temp_benches.first().map(|b| b.2);
-                    json!({ "near_bench": bench, "recipes": list, "mode": if mode_bench { "bench" } else { "hand" },
-                            "own_bench": own, "temp_left": temp,
+                    json!({ "recipes": list,
                             "tabs": ["Şifa", "İksir", "Silah Ve Alet", "Ekipman", "Takı", "Malzeme", "Araç", "Üs"] })
                 }
                 "garage" => {
@@ -9590,7 +9487,6 @@ pub mod ui {
             let v: Value = serde_json::from_str(s).unwrap_or(Value::Null);
             let cmd = v["cmd"].as_str().unwrap_or("");
             let int = |k: &str| v[k].as_u64().unwrap_or(0) as usize;
-            let num = |k: &str| v[k].as_f64().unwrap_or(0.0) as f32;
             // çanta komutlarından önce düzen güncel olsun (seviye atlayınca ana çanta büyür)
             if matches!(cmd, "equip" | "unequip" | "use" | "drop" | "move" | "split" | "move_page" | "sort" | "chest_take" | "chest_all") {
                 self.progress.relayout_inv();
@@ -9955,10 +9851,6 @@ pub mod ui {
                     self.hardcore = v["hardcore"].as_bool().unwrap_or(false);
                     Ok(String::new())
                 }
-                "pickup_bench" => self.pickup_bench(),
-                // V15 inşa modu: önizleme yeri uygun mu / seçilen yere kur
-                "bench_spot" => self.bench_spot(num("x"), num("y")).map(|_| String::new()),
-                "place_bench" => self.place_bench_at(int("slot"), num("x"), num("y")),
                 // V12 büyücü haritası: yalnız büyücünün yanında
                 "wizard_tp" => {
                     if self.near_wizard() {
@@ -10158,7 +10050,6 @@ pub mod ui {
                         .map(|n| format!("{n} kuşanıldı"))
                         .map_err(String::from);
                 }
-                ItemKind::Bench => return self.place_bench(slot),
                 ItemKind::Tool if d.id.starts_with("veh_") => return self.summon_vehicle(if d.id == "veh_car" { 2 } else { 1 }),
                 ItemKind::Tool => return Err("Alet çantanda durdukça işe yarar".into()),
                 ItemKind::Consumable => {}
@@ -10249,9 +10140,6 @@ pub mod ui {
 
         fn craft(&mut self, i: usize, n: u32) -> Result<String, String> {
             let r = RECIPES.get(i).ok_or("Tarif yok")?;
-            if r.bench && !self.near_bench() {
-                return Err("Bu tarif için çalışma tezgâhı gerekli".into());
-            }
             let out = data::item_index(r.out).ok_or("Tarif hatalı")?;
             let mut made = 0;
             for _ in 0..n {
@@ -10314,10 +10202,10 @@ pub mod ui {
             ((ITEMS[item].value as f32) * 0.5 * missing).ceil().max(1.0) as u32
         }
 
-        /// Onarım: tezgâh başında ya da Tamirci Viktor'un yanında. slot → çantadaki eşya, eq → kuşanılan yuva, all → hepsi.
+        /// Onarım: Tamirci Viktor'un yanında. slot → çantadaki eşya, eq → kuşanılan yuva, all → hepsi.
         fn repair(&mut self, slot: Option<i64>, eq: Option<&str>, all: bool) -> Result<String, String> {
-            if !self.near_bench() && !self.near_npc(4) {
-                return Err("Onarım için çalışma tezgâhına ya da Tamirci Viktor'a git".into());
+            if !self.near_npc(4) {
+                return Err("Onarım için Tamirci Viktor'a git".into());
             }
             // (kaynak, eşya, dayanıklılık): kaynak 0..n çanta slotu, n+k kuşanılan yuva k
             let mut todo: Vec<(Option<usize>, Option<&'static str>, usize, u16)> = Vec::new();
@@ -11209,7 +11097,27 @@ pub mod world {
         "house1", "house2", "hq_command_tent", "jeep_wreck", "jeep_wreck2", "kennel", "l_forest_1", "lamp",
         "log", "mailbox", "med_tent", "mil_tent", "oak0", "oak2", "oak_autumn", "pine2",
         "stall", "tent", "tent_olive", "tent_patched", "tent_tarp", "wall_x", "wall_z", "watchtower",
-        "wreck0", "wreck1",
+        "wreck0", "wreck1", "ammo_stack", "anchor_snow", "anvil", "barrel_tox", "barricade", "base_gate",
+        "bed", "billboard", "bunker", "burnt_pine", "burnt_stump", "burnt_tree", "bus_stop", "bush0",
+        "bush1", "bush2", "bush3", "bush4", "cactus", "charred_log", "cone", "cone_pile",
+        "cow_skull", "d_bswamp_0", "d_bswamp_1", "d_bswamp_2", "d_bswamp_3", "d_bswamp_4", "d_bswamp_6", "d_bswamp_7",
+        "d_burnt_0", "d_burnt_1", "d_burnt_2", "d_burnt_3", "d_burnt_4", "d_burnt_5", "d_burnt_7", "d_city_1",
+        "d_city_2", "d_city_3", "d_city_4", "d_city_5", "d_city_6", "d_city_7", "d_desert_0", "d_desert_1",
+        "d_desert_2", "d_desert_3", "d_desert_4", "d_desert_5", "d_desert_6", "d_desert_7", "d_forest_0", "d_forest_1",
+        "d_forest_2", "d_forest_3", "d_forest_4", "d_forest_5", "d_forest_6", "d_front_0", "d_front_1", "d_front_2",
+        "d_front_3", "d_front_4", "d_front_5", "d_front_6", "d_front_7", "d_harbor_0", "d_harbor_1", "d_harbor_2",
+        "d_harbor_3", "d_harbor_4", "d_harbor_5", "d_harbor_6", "d_harbor_7", "d_home_0", "d_home_1", "d_home_2",
+        "d_home_3", "d_home_4", "d_home_5", "d_home_6", "d_home_7", "deer_skeleton", "dumpster", "ember_rocks",
+        "fence", "fence_wood", "flower_butter", "flower_corn", "flower_daisy", "flower_lavender", "flower_poppy", "front_crater",
+        "front_tank_wreck", "front_trench", "frozen_boat", "fuel_pump", "gas_can", "gas_station", "hangar", "harbor_containers",
+        "helipad", "hq_flag", "hq_radio_mast", "hq_sign", "ice_boulder", "l_bswamp_1", "l_bswamp_2", "l_burnt_1",
+        "l_burnt_2", "l_city_1", "l_city_2", "l_desert_1", "l_desert_2", "l_front_1", "l_front_2", "l_harbor_1",
+        "l_harbor_2", "med_station", "moss_tree", "mushroom_log", "mushrooms0", "mushrooms1", "pine1", "police",
+        "radar_dish", "rain_barrel", "reeds", "reeds0", "reeds1", "road_sign", "rock_big0", "rock_big1",
+        "rock_big2", "rock_sand0", "rock_sand1", "rock_small0", "rock_small1", "rock_small2", "rock_snow0", "rowboat",
+        "sandbag_nest", "sandbags", "shop0", "shop1", "smolder_log", "snow_barrels", "snow_pine", "stove",
+        "street_lamp", "stump", "swamp_shack", "tower", "train_dummy", "train_sign", "train_target", "trash",
+        "weapon_rack", "workbench",
     ];
     /// kaldırılan nesnenin yer tutucu adı ve dizini (STATIC_NAMES'in son öğesi)
     pub const EMPTY_STATIC: &str = "-";
@@ -11218,83 +11126,27 @@ pub mod world {
     pub const STATIC_NAMES: &[&str] = &[
         "oak1",
         "pine0",
-        "pine1",
-        "bush0",
-        "bush1",
-        "bush2",
-        "bush3",
-        "bush4",
-        "rock_big0",
-        "rock_big1",
-        "rock_big2",
-        "rock_small0",
-        "rock_small1",
-        "rock_small2",
-        "stump",
         "grass0",
         "grass1",
         "grass2",
         "grass3",
-        "flower_daisy",
-        "flower_poppy",
-        "flower_corn",
-        "flower_butter",
-        "flower_lavender",
-        "mushrooms0",
-        "mushrooms1",
-        "reeds0",
-        "reeds1",
-        "shop0",
-        "shop1",
-        "police",
-        "tower",
-        "barrel_tox",
-        "workbench",
-        "sandbags",
-        "fence",
-        "trash",
-        "cone",
         "quest_board",
-        "med_station",
-        "fuel_pump",
-        "anvil",
-        "barricade",
-       
         "mystery_tree",
-        "gas_station",
         "portal",
         // V8 kullanıcı görselleri (Art/v8/props): bölge simge yapıları, üs yapıları, kişisel üs eşyaları
-        "burnt_tree", "burnt_stump", "swamp_shack", "harbor_containers", "hangar", "bunker",         "helipad", "bed", "stove", "fence_wood", "base_gate", "weapon_rack", "rain_barrel",
         // V10 bölge dekorları (Art/v10/props): donmuş liman, yanık orman, çöl, kara bataklık, askerî bölge, eski şehir, kamp çadırları
-        "snow_pine", "ice_boulder", "frozen_boat", "anchor_snow", "snow_barrels",
-        "burnt_pine", "smolder_log", "charred_log", "deer_skeleton", "ember_rocks",
-        "cactus", "cow_skull", "road_sign", "cone_pile", "gas_can",
-        "moss_tree", "mushroom_log", "rowboat", "reeds", "toxic_puddle",
-        "radar_dish", "ammo_stack", "sandbag_nest",
-        "street_lamp", "bus_stop", "dumpster", "billboard",
+        "toxic_puddle",
         // V13 (V11 paketi): cephe ve karargâh, eğitim üssü, karantina sınırı
-        "front_trench", "front_crater", "front_tank_wreck",
-        "hq_radio_mast", "hq_flag", "hq_sign",
-        "train_dummy", "train_sign", "train_target",
         "quarantine_wall", "quarantine_post", "quarantine_sign", "border_searchlight", "border_bones",
         // V13 bölge paketi: sınır parçaları (b), dekorlar (d), simge yapılar (l); areas::AREAS sırasıyla
-        "b_forest_0", "b_forest_1", "b_forest_2", "b_forest_3", "b_forest_4", "b_forest_5", "d_forest_0", "d_forest_1", "d_forest_2", "d_forest_3", "d_forest_4", "d_forest_5", "d_forest_6", "l_forest_2",
-        "b_city_0", "b_city_1", "b_city_2", "b_city_3", "b_city_4", "b_city_5", "d_city_1", "d_city_2", "d_city_3", "d_city_4", "d_city_5", "d_city_6", "d_city_7", "l_city_1", "l_city_2",
-        "b_burnt_0", "b_burnt_1", "b_burnt_2", "b_burnt_3", "b_burnt_4", "b_burnt_5", "d_burnt_0", "d_burnt_1", "d_burnt_2", "d_burnt_3", "d_burnt_4", "d_burnt_5", "d_burnt_7", "l_burnt_1", "l_burnt_2",
-        "b_desert_0", "b_desert_1", "b_desert_2", "b_desert_3", "b_desert_4", "b_desert_5", "d_desert_0", "d_desert_1", "d_desert_2", "d_desert_3", "d_desert_4", "d_desert_5", "d_desert_6", "d_desert_7", "l_desert_1", "l_desert_2",
-        "b_bswamp_0", "b_bswamp_1", "b_bswamp_2", "b_bswamp_3", "b_bswamp_4", "b_bswamp_5", "d_bswamp_0", "d_bswamp_1", "d_bswamp_2", "d_bswamp_3", "d_bswamp_4", "d_bswamp_5", "d_bswamp_6", "d_bswamp_7", "l_bswamp_1", "l_bswamp_2",
-        "b_harbor_0", "b_harbor_1", "b_harbor_2", "b_harbor_3", "b_harbor_4", "b_harbor_5", "d_harbor_0", "d_harbor_1", "d_harbor_2", "d_harbor_3", "d_harbor_4", "d_harbor_5", "d_harbor_6", "d_harbor_7", "l_harbor_1", "l_harbor_2",
-        "b_front_0", "b_front_1", "b_front_2", "b_front_3", "b_front_4", "b_front_5", "d_front_0", "d_front_1", "d_front_2", "d_front_3", "d_front_4", "d_front_5", "d_front_6", "d_front_7", "l_front_1", "l_front_2",
-        "b_home_0", "b_home_1", "b_home_2", "b_home_3", "b_home_4", "b_home_5", "d_home_0", "d_home_1", "d_home_2", "d_home_3", "d_home_4", "d_home_5", "d_home_6", "d_home_7",
-        // V19 bölge kaya varyantları (Tools/assetgen/v19_nature.py): çölde kumtaşı, limanda karlı kaya
-        "rock_sand0", "rock_sand1", "rock_snow0",
+        "b_forest_0", "b_forest_1", "b_forest_2", "b_forest_3", "b_forest_4", "b_forest_5", "l_forest_2",
+        "b_city_0", "b_city_1", "b_city_2", "b_city_3", "b_city_4", "b_city_5",         "b_burnt_0", "b_burnt_1", "b_burnt_2", "b_burnt_3", "b_burnt_4", "b_burnt_5",         "b_desert_0", "b_desert_1", "b_desert_2", "b_desert_3", "b_desert_4", "b_desert_5",         "b_bswamp_0", "b_bswamp_1", "b_bswamp_2", "b_bswamp_3", "b_bswamp_4", "b_bswamp_5", "d_bswamp_5",         "b_harbor_0", "b_harbor_1", "b_harbor_2", "b_harbor_3", "b_harbor_4", "b_harbor_5",         "b_front_0", "b_front_1", "b_front_2", "b_front_3", "b_front_4", "b_front_5",         "b_home_0", "b_home_1", "b_home_2", "b_home_3", "b_home_4", "b_home_5",         // V19 bölge kaya varyantları (Tools/assetgen/v19_nature.py): çölde kumtaşı, limanda karlı kaya
         // V22: oyundan kaldırılan nesnelerin yer tutucusu (görseli yok, çizilmez, çarpışmaz)
         EMPTY_STATIC,
     ];
     pub fn sprite(name: &str) -> u16 {
-        STATIC_NAMES.iter().position(|n| *n == name).unwrap_or(0) as u16
+        STATIC_NAMES.iter().position(|n| *n == name).map_or(EMPTY_IDX, |i| i as u16)
     }
-    pub const STUMP: &str = "stump";
     /// ağaç ve kaya canı (yumruk 25, taş alet 50, demir alet 100 vurur)
     pub const TREE_HP: f32 = 500.0;
 
@@ -11720,7 +11572,6 @@ pub mod world {
         pub citems: Vec<u32>,
         pub vehicle_spawns: Vec<(usize, f32, f32, f32)>,
         pub merchants: Vec<(f32, f32)>,
-        pub benches: Vec<(f32, f32)>,
         pub snipers: Vec<(f32, f32)>,
     }
 
@@ -11816,7 +11667,6 @@ pub mod world {
                 citems: Vec::new(),
                 vehicle_spawns: Vec::new(),
                 merchants: Vec::new(),
-                benches: Vec::new(),
                 snipers: Vec::new(),
             };
             // ---- bölgeler ve zemin
@@ -12195,7 +12045,6 @@ pub mod world {
                 0.0,
                 0.0,
             );
-            self.benches.push((188.0 * t, 129.0 * t));
             for (cx, cy) in [
                 (166.0, 138.0),
                 (194.0, 138.0),
@@ -12659,7 +12508,6 @@ pub mod world {
                 0.0,
                 0.0,
             );
-            self.benches.push((cx + 4.0 * t, cy - 2.0 * t));
             for (ox, oy) in [(-6.5, 3.0), (6.5, 3.0), (-3.0, 6.5), (3.5, 6.5)] {
                 self.push(
                     "tent",
@@ -13127,7 +12975,6 @@ pub mod world {
             self.push("weapon_rack", Kind::Prop, (cx + 3.0) * t, (cy - 6.0) * t, Shape::Rect(0.9 * t, 0.3 * t), 0.0, 0.0);
             self.push("rain_barrel", Kind::Prop, (cx + 8.5) * t, (cy + 4.0) * t, Shape::Circle(0.35 * t), 0.0, 0.0);
             self.push("workbench", Kind::Bench, (cx + 6.0) * t, (cy - 2.0) * t, Shape::Rect(0.9 * t, 0.5 * t), 0.0, 0.0);
-            self.benches.push(((cx + 6.0) * t, (cy - 1.0) * t));
             for (ox, oy) in [(-9.0, -9.0), (9.0, -9.0), (-9.0, 9.0), (9.0, 9.0)] {
                 self.push("lamp", Kind::Lamp, (cx + ox) * t, (cy + oy) * t, Shape::Circle(0.15 * t), 0.0, 0.0);
             }
@@ -13321,7 +13168,6 @@ pub mod world {
                 a.is_some() && whole && !(k < old_content && a == Some(FRONT))
             });
             self.merchants.retain(|&(x, y)| inside(x, y));
-            self.benches.retain(|&(x, y)| inside(x, y));
             self.snipers.retain(|&(x, y)| inside(x, y));
             self.vehicle_spawns.retain(|&(_, x, y, _)| inside(x, y));
             // boşluğun zemini
@@ -13728,22 +13574,19 @@ pub mod world {
         use crate::Hyp;
         use super::*;
 
-        /// V10 bölge dekorlarının her biri dünyada en az bir kez yer alır; çadırlar üç görsele dağılır.
+        /// V22: kaldırılan nesneler dünyada görünmez, çarpışmasız yer tutucudur; kalan adların hepsi atlas adıdır.
         #[test]
-        fn v10_decor_placed() {
+        fn removed_statics_are_invisible_placeholders() {
             let w = World::generate(7);
-            let mut n = std::collections::HashMap::new();
+            assert!(w.statics.iter().any(|s| s.sprite == EMPTY_IDX), "yer tutucu yok");
             for s in &w.statics {
-                *n.entry(STATIC_NAMES[s.sprite as usize]).or_insert(0u32) += 1;
+                let name = STATIC_NAMES[s.sprite as usize];
+                assert!(!REMOVED_STATICS.contains(&name), "kaldırılan nesne yerleşti: {name}");
+                if s.sprite == EMPTY_IDX {
+                    assert!(matches!(s.shape, Shape::None) && s.kind == Kind::Deco, "yer tutucu çarpışıyor");
+                }
             }
-            let first = STATIC_NAMES.iter().position(|s| *s == "snow_pine").unwrap();
-            // V15: eski dünya çevresindeki karantina duvarının parçaları artık kullanılmıyor
-            let retired = ["quarantine_wall", "quarantine_post", "quarantine_sign", "border_searchlight", "border_bones"];
-            // V19: sınır parçaları (b_*) da kalktı: bölge kenarı yalnız bulut
-            let missing: Vec<_> = STATIC_NAMES[first..].iter().filter(|k| !retired.contains(*k) && !k.starts_with("b_") && n.get(*k).copied().unwrap_or(0) == 0).collect();
-            assert!(!n.keys().any(|k| k.starts_with("b_")), "sınır parçası kaldı");
-            assert!(missing.is_empty(), "yerleşmeyen: {missing:?}");
-            assert_eq!(n.get("tent").copied().unwrap_or(0), 0);
+            assert!(w.statics.iter().any(|s| s.kind == Kind::Tree), "ağaç kalmadı");
         }
 
         #[test]
@@ -13796,7 +13639,7 @@ pub mod world {
                 .statics
                 .iter()
                 .all(|s| (s.sprite as usize) < STATIC_NAMES.len()));
-            assert!(!w.merchants.is_empty() && !w.benches.is_empty() && w.snipers.len() >= 6);
+            assert!(!w.merchants.is_empty() && w.snipers.len() >= 6);
         }
 
 
@@ -14110,20 +13953,12 @@ mod combat {
                         let rv = self.rng.below(3);
                         self.spawn_drop_id("resin", 1 + rv, sx, sy);
                     }
+                    // V22: kayalar kalktı; taş ağacın kök toprağından çıkar
+                    let stone = ((1 + self.rng.below(2)) as f32 * gather).round() as u32;
+                    self.spawn_drop_id("stone", stone.max(1), sx, sy);
                     self.give_xp(sx, sy, 10);
                     self.story_event(crate::story::Ev::Chop);
                     let done = self.progress.quest_event(QuestKind::Chop, 1);
-                    self.quests_done(done);
-                }
-                Kind::Rock => {
-                    let n = ((3 + self.rng.below(3)) as f32 * gather).round() as u32;
-                    self.spawn_drop_id("stone", n, sx, sy);
-                    if self.rng.chance(0.25) {
-                        self.spawn_drop_id("scrap", 1, sx, sy);
-                    }
-                    self.give_xp(sx, sy, 8);
-                    self.story_event(crate::story::Ev::Mine);
-                    let done = self.progress.quest_event(QuestKind::Mine, 1);
                     self.quests_done(done);
                 }
                 Kind::Crate => {
@@ -14736,14 +14571,10 @@ mod draw {
                 if s.sprite == crate::world::EMPTY_IDX {
                     continue;
                 }
-                let mut sprite = s.sprite as f32;
-                if s.broken {
-                    match s.kind {
-                        Kind::Tree if s.sprite == crate::world::sprite("burnt_tree") => sprite = crate::world::sprite("burnt_stump") as f32,
-                        Kind::Tree => sprite = crate::world::sprite("stump") as f32,
-                        Kind::Rock | Kind::Crate => continue,
-                        _ => {}
-                    }
+                let sprite = s.sprite as f32;
+                // V22: kütük görseli kalktı: devrilen ağaç yeniden büyüyene dek görünmez
+                if s.broken && matches!(s.kind, Kind::Tree | Kind::Rock | Kind::Crate) {
+                    continue;
                 }
                 let shake = if s.shake > 0.0 {
                     (s.shake * 60.0).sin() * 3.0 * (s.shake / 0.3)
@@ -14770,17 +14601,6 @@ mod draw {
                     [
                         D_STATIC, sprite, s.x, s.y, i as f32, kind, s.phase, shake, hp, hw, hh, 0.0,
                     ],
-                ));
-            }
-            // V12.1 oyuncunun kurduğu tezgâhlar: dünya tezgâhı gibi çizilir (Kotlin yakınlık halkası ve dokunma kutusu verir)
-            let bench_sprite = crate::world::sprite("workbench") as f32;
-            for (bx, by, _) in self.placed_benches() {
-                if bx < x0 || bx > x1 || by < y0 || by > y1 {
-                    continue;
-                }
-                self.draw_tmp.push((
-                    by,
-                    [D_STATIC, bench_sprite, bx, by, -1.0, crate::world::Kind::Bench as u8 as f32, 0.37, 0.0, -1.0, 0.0, 0.0, 0.0],
                 ));
             }
             for d in &self.drops {
@@ -14919,16 +14739,6 @@ mod draw {
                     ],
                 ));
             }
-            // V12.2 gezgin tüccarın kamyoneti (sürücüsüz araç olarak; binilmez)
-            for c in &self.caravans {
-                if c.x < x0 || c.x > x1 || c.y < y0 || c.y > y1 {
-                    continue;
-                }
-                self.draw_tmp.push((
-                    c.y,
-                    [D_VEHICLE, crate::caravan::TRUCK as f32, c.x, c.y, Game::vehicle_dir(c.angle) as f32, c.angle.to_degrees(), c.speed, -1.0, 1.0, 0.0, -1.0, 0.0],
-                ));
-            }
             for n in &self.npcs {
                 if n.x < x0 || n.x > x1 || n.y < y0 || n.y > y1 {
                     continue;
@@ -15052,8 +14862,6 @@ mod draw {
                 0.0
             };
             let near_m = self.near_caravan().is_some();
-            // kamp tezgâhı ve kurulan tezgâhlar (kalıcı ya da süreli) aynı ölçüyle
-            let near_b = self.near_bench();
             let boss = self
                 .zombies
                 .iter()
@@ -15085,7 +14893,7 @@ mod draw {
                 g.char_level[g.character] as f32,
                 near_v,
                 if near_m { 1.0 } else { 0.0 },
-                if near_b { 1.0 } else { 0.0 },
+                0.0, // V22: tezgâh kalktı (eski NEAR_BENCH yuvası boş)
                 if veh.is_some() { 1.0 } else { 0.0 },
                 veh.map_or(0.0, |v| v.fuel),
                 veh.map_or(0.0, |v| v.hp / VEHICLES[v.kind].hp),
@@ -15655,206 +15463,9 @@ pub mod areas {
         }
     }
 }
-pub mod benches {
-    //! V12.1 kurulabilir tezgâh: "Tezgâh" eşyası elle üretilir, kullanınca bulunulan yere kurulur.
-    //! Kişisel üste kurulan kalıcıdır (kayıtta, en çok HOME_MAX); başka yerde BENCH_TTL saniye durur (aynı anda bir tane).
-    //! Gelişmiş tarifler (bench: true) yalnız bir tezgâhın yanında, ayrı "Tezgâh" ekranında üretilir.
-    #[allow(unused_imports)]
-    use crate::Hyp;
-    use crate::data::{self, ITEMS};
-    use crate::game::Game;
-
-    /// Dışarıda kurulan tezgâhın ömrü (sn)
-    pub const BENCH_TTL: f32 = 600.0;
-    /// Kişisel üsteki kalıcı tezgâh sınırı
-    pub const HOME_MAX: usize = 3;
-    /// Tezgâha yakınlık (dünya pikseli)
-    pub const BENCH_NEAR: f32 = 160.0;
-    /// V15 inşa modu: tezgâh oyuncudan en çok 6 karo uzağa kurulur
-    pub const BUILD_RANGE: f32 = 6.0 * crate::world::TILE;
-
-    impl Game {
-        /// Tezgâhı oyuncunun önüne kurar.
-        pub fn place_bench(&mut self, slot: usize) -> Result<String, String> {
-            // oyuncunun sağ yanına (önüne kurulunca karakteri örtüyordu)
-            let (x, y) = (self.player.x + 70.0, self.player.y + 10.0);
-            self.place_bench_at(slot, x, y)
-        }
-
-        /// V15 inşa modu: seçilen yer uygun mu (menzil, aynı bölge, engel, başka tezgâha yakınlık)
-        pub fn bench_spot(&mut self, x: f32, y: f32) -> Result<(), String> {
-            if self.player.dead {
-                return Err("Önce yeniden doğ".into());
-            }
-            let (px, py) = (self.player.x, self.player.y);
-            if (x - px).hyp(y - py) > BUILD_RANGE {
-                return Err("Çok uzak (en çok 6 karo)".into());
-            }
-            if crate::areas::area_at(x, y) != crate::areas::area_at(px, py) {
-                return Err("Bölge sınırının ötesine kurulamaz".into());
-            }
-            if self.world.blocked(x, y, 26.0, &mut self.scratch) {
-                return Err("Burası dolu".into());
-            }
-            let near = |&(bx, by): &(f32, f32)| (bx - x).hyp(by - y) < 90.0;
-            if self.world.benches.iter().any(near) || self.placed_benches().iter().any(|&(bx, by, _)| near(&(bx, by))) {
-                return Err("Başka bir tezgâha çok yakın".into());
-            }
-            Ok(())
-        }
-
-        /// Tezgâhı verilen yere kurar (inşa modu; yer [bench_spot] ile denetlenir).
-        pub fn place_bench_at(&mut self, slot: usize, x: f32, y: f32) -> Result<String, String> {
-            let s = self.progress.inv.slots.get(slot).copied().flatten().ok_or("Boş slot")?;
-            if ITEMS[s.item as usize].id != "workbench" {
-                return Err("Bu bir tezgâh değil".into());
-            }
-            self.bench_spot(x, y)?;
-            let msg = if self.at_home() {
-                if self.progress.benches.len() >= HOME_MAX {
-                    return Err(format!("Üssüne en çok {HOME_MAX} tezgâh kurabilirsin"));
-                }
-                self.progress.benches.push((x, y));
-                "Tezgâh kuruldu: kişisel üssünde kalıcı".to_string()
-            } else {
-                // dışarıda aynı anda tek tezgâh: yenisi eskisinin yerini alır
-                self.temp_benches.clear();
-                self.temp_benches.push((x, y, BENCH_TTL));
-                format!("Tezgâh kuruldu: {} dakika durur", (BENCH_TTL / 60.0) as u32)
-            };
-            crate::inventory::take_from(&mut self.progress.inv.slots, slot, Some(1));
-            self.story_event(crate::story::Ev::Ping("bench"));
-            Ok(msg)
-        }
-
-        /// Yakındaki kalıcı (üs) tezgâhı çantaya geri alır.
-        pub fn pickup_bench(&mut self) -> Result<String, String> {
-            let (px, py) = (self.player.x, self.player.y);
-            let i = self
-                .progress
-                .benches
-                .iter()
-                .position(|&(x, y)| (x - px).hyp(y - py) < BENCH_NEAR)
-                .ok_or("Yakında kaldırılabilecek tezgâh yok")?;
-            let item = data::item_index("workbench").ok_or("Tezgâh eşyası yok")?;
-            if !self.progress.inv.can_fit(item, 1) {
-                return Err("Çantanda yer yok".into());
-            }
-            self.progress.benches.remove(i);
-            self.progress.inv.add(item, 1);
-            Ok("Tezgâh çantana alındı".into())
-        }
-
-        /// Oyuncunun kurduğu tezgâhlar: (x, y, kalan sn; kalıcıysa -1)
-        pub fn placed_benches(&self) -> Vec<(f32, f32, f32)> {
-            let mut v: Vec<(f32, f32, f32)> = self.progress.benches.iter().map(|&(x, y)| (x, y, -1.0)).collect();
-            v.extend(self.temp_benches.iter().copied());
-            v
-        }
-
-        /// Dışarıdaki tezgâhın süresi
-        pub(crate) fn update_benches(&mut self, dt: f32) {
-            let before = self.temp_benches.len();
-            for b in self.temp_benches.iter_mut() {
-                b.2 -= dt;
-            }
-            self.temp_benches.retain(|b| b.2 > 0.0);
-            if self.temp_benches.len() < before {
-                self.msg("Kurduğun tezgâhın süresi doldu");
-            }
-        }
-
-        pub fn near_placed_bench(&self) -> bool {
-            let (px, py) = (self.player.x, self.player.y);
-            self.placed_benches().iter().any(|&(x, y, _)| (x - px).hyp(y - py) < BENCH_NEAR)
-        }
-    }
-
-    #[cfg(test)]
-    mod tests {
-        #[allow(unused_imports)]
-        use crate::Hyp;
-        use crate::game::Game;
-        use crate::Progress;
-
-        #[test]
-        fn build_mode_checks_range_and_spot() {
-            let mut g = Game::new(7, Progress::default(), 0);
-            g.progress.relayout_inv();
-            g.progress.inv.add_id("workbench", 1);
-            g.player.x = 150.0 * crate::world::TILE;
-            g.player.y = 320.0 * crate::world::TILE;
-            let (px, py) = (g.player.x, g.player.y);
-            assert!(g.bench_spot(px + 10.0 * crate::world::TILE, py).is_err(), "menzil dışı");
-            // menzil içinde boş bir yer bulunur ve oraya kurulur
-            let spot = (1..6)
-                .flat_map(|r| (0..8).map(move |k| (r as f32 * crate::world::TILE, k as f32 * std::f32::consts::FRAC_PI_4)))
-                .map(|(d, a)| (px + a.cos() * d, py + a.sin() * d))
-                .find(|&(x, y)| g.bench_spot(x, y).is_ok())
-                .expect("yakında boş yer");
-            let s = g.progress.inv.slots.iter().position(|s| s.is_some_and(|s| crate::data::ITEMS[s.item as usize].id == "workbench")).unwrap();
-            g.place_bench_at(s, spot.0, spot.1).unwrap();
-            assert_eq!(g.temp_benches[0].0, spot.0);
-            // aynı yere ikinci tezgâh olmaz
-            assert!(g.bench_spot(spot.0 + 10.0, spot.1).is_err());
-        }
-
-        #[test]
-        fn workbench_places_temporary_outside_and_permanent_at_home() {
-            let mut g = Game::new(7, Progress::default(), 0);
-            g.progress.relayout_inv();
-            g.progress.inv.add_id("workbench", 2);
-            let slot = |g: &Game| g.progress.inv.slots.iter().position(|s| s.is_some_and(|s| crate::data::ITEMS[s.item as usize].id == "workbench")).unwrap();
-            // kampın dışında: tezgâh yok → kur → yanında tezgâh tarifleri açılır, 10 dk sonra kaybolur
-            g.player.x = 150.0 * crate::world::TILE;
-            g.player.y = 320.0 * crate::world::TILE;
-            assert!(!g.near_bench());
-            let s = slot(&g);
-            g.place_bench(s).unwrap();
-            assert!(g.near_bench());
-            g.update_benches(super::BENCH_TTL + 1.0);
-            assert!(!g.near_bench());
-            // kişisel üste kalıcı, geri alınabilir
-            let (hx, hy) = crate::world::home_spawn();
-            g.player.x = hx;
-            g.player.y = hy;
-            let s = slot(&g);
-            g.place_bench(s).unwrap();
-            assert_eq!(g.progress.benches.len(), 1);
-            g.update_benches(super::BENCH_TTL + 1.0);
-            assert!(g.near_bench());
-            assert_eq!(g.progress.inv.count_id("workbench"), 0);
-            g.pickup_bench().unwrap();
-            assert_eq!(g.progress.inv.count_id("workbench"), 1);
-            assert!(g.progress.benches.is_empty());
-        }
-
-        #[test]
-        fn bench_list_includes_hand_recipes() {
-            let mut g = Game::new(7, Progress::default(), 0);
-            let hand = g.ui_json("craft");
-            let bench = g.ui_json("craft_bench");
-            let ids = |s: &str| -> Vec<String> {
-                let v: serde_json::Value = serde_json::from_str(s).unwrap();
-                v["recipes"].as_array().unwrap().iter().map(|r| r["out"]["id"].as_str().unwrap().to_string()).collect()
-            };
-            let (h, b) = (ids(&hand), ids(&bench));
-            assert!(h.contains(&"bandage".to_string()) && h.contains(&"workbench".to_string()));
-            // V21: el ve tezgâh aynı tarif listesini (aynı malzemeleri) gösterir
-            assert!(b.contains(&"medkit".to_string()) && b.contains(&"bandage".to_string()));
-            assert_eq!(h, b, "el ve tezgâh listeleri aynı olmalı");
-            // tezgâh tarifi elden üretilemez
-            let i = crate::data::RECIPES.iter().position(|r| r.bench).unwrap();
-            g.player.x = 150.0 * crate::world::TILE;
-            g.player.y = 320.0 * crate::world::TILE;
-            let r: serde_json::Value = serde_json::from_str(&g.command(&format!(r#"{{"cmd":"craft","i":{i}}}"#))).unwrap();
-            assert_eq!(r["ok"], false);
-        }
-    }
-}
 pub mod caravan {
-    //! V12.2 Gezgin Tüccar Marco: sabit tezgâh yok; her bölgede kendi kamyonetiyle dolaşır. Her 20 dakikada (sunucu saatiyle,
-    //! herkeste aynı) bölgenin karakollarından birine gelir, park eder, satış yapar, süre bitince gider. Her gelişinde
+    //! V12.2 Gezgin Tüccar Marco: her 20 dakikada (sunucu saatiyle, herkeste aynı) bölgenin karakollarından birinde
+    //! bekler ve satış yapar (V22: kamyoneti kalktı; dilim değişince bir sonraki durakta belirir). Her gelişinde
     //! malları baştan seçilir: listedeki her eşyanın bir "gelme olasılığı" vardır (dükkânda yazar); aynı dilimde aynı bölgede
     //! herkes aynı malları görür. Bir oyuncu bir gelişte her maldan stok kadar alabilir.
     #[allow(unused_imports)]
@@ -15868,12 +15479,6 @@ pub mod caravan {
 
     /// Bir geliş süresi (sn)
     pub const SLOT: f64 = 1200.0;
-    /// Gelirken ve giderken sürüş süresi (sn)
-    pub const DRIVE: f32 = 12.0;
-    /// Kamyonetin geldiği yol uzunluğu (dünya pikseli)
-    const ROAD: f32 = 22.0 * TILE;
-    /// Araç türü (data::VEHICLES: suv)
-    pub const TRUCK: usize = 3;
 
     /// Getirebileceği mallar: (eşya, gelme olasılığı %, fiyat, gereken seviye, en çok stok)
     pub const POOL: &[(&str, u32, u32, u32, u32)] = &[
@@ -15886,7 +15491,6 @@ pub mod caravan {
         ("potion_heal", 40, 85, 3, 3),
         ("fuel", 40, 25, 8, 6),
         ("antidote", 35, 40, 6, 3),
-        ("workbench", 30, 120, 1, 1),
         ("potion_speed", 25, 130, 6, 2),
         ("w_knife", 20, 130, 1, 1),
         ("potion_power", 15, 190, 12, 2),
@@ -15910,15 +15514,13 @@ pub mod caravan {
         ("titan_shard", 1, 600, 40, 1),
     ];
 
-    /// Bir bölgedeki kervan: duraklar (park yeri, geliş yönü)
+    /// Bir bölgedeki tüccar: duraklar (bekleme yeri)
     pub struct Caravan {
         pub area: usize,
-        pub stops: Vec<((f32, f32), (f32, f32))>,
-        /// şu anki konum, yön (açı) ve hız
+        pub stops: Vec<(f32, f32)>,
+        /// şu anki durak
         pub x: f32,
         pub y: f32,
-        pub angle: f32,
-        pub speed: f32,
         pub parked: bool,
         /// Npc listesindeki tüccarın sırası
         pub npc: usize,
@@ -15940,33 +15542,18 @@ pub mod caravan {
     }
 
     impl Caravan {
-        /// Bölgenin kervanını kurar: her durakta kamyonet için boş yer ve önü açık bir geliş yönü aranır.
+        /// Bölgenin tüccarını kurar: her durakta katı nesnelerin dışında bir bekleme yeri.
         pub fn build(w: &world::World, area: usize, npc: usize) -> Caravan {
             let mut scratch = Vec::new();
             let stops = stop_points(w, area)
                 .into_iter()
                 .map(|(sx, sy)| {
-                    // park yeri: tüccarın yanında, katı nesnelerin dışında
-                    let (mut px, mut py) = (sx + 2.6 * TILE, sy + 0.5 * TILE);
-                    w.resolve(&mut px, &mut py, 40.0, true, &mut scratch);
-                    // geliş yönü: 8 yönden yolu en açık olan
-                    let mut best = (0, (px - ROAD, py));
-                    for k in 0..8 {
-                        let a = k as f32 * std::f32::consts::TAU / 8.0;
-                        let (dx, dy) = (a.cos(), a.sin());
-                        let clear = (1..=22).take_while(|s| {
-                            let d = *s as f32 * TILE;
-                            let (qx, qy) = (px + dx * d, py + dy * d);
-                            areas::area_at(qx, qy) == area && !w.blocked(qx, qy, 30.0, &mut scratch)
-                        }).count();
-                        if clear > best.0 {
-                            best = (clear, (px + dx * ROAD, py + dy * ROAD));
-                        }
-                    }
-                    ((px, py), best.1)
+                    let (mut px, mut py) = (sx, sy + 0.5 * TILE);
+                    w.resolve(&mut px, &mut py, 20.0, true, &mut scratch);
+                    (px, py)
                 })
                 .collect();
-            Caravan { area, stops, x: 0.0, y: 0.0, angle: 0.0, speed: 0.0, parked: false, npc }
+            Caravan { area, stops, x: 0.0, y: 0.0, parked: false, npc }
         }
     }
 
@@ -15982,7 +15569,7 @@ pub mod caravan {
 
         /// Kervanın bu dilimdeki park yeri
         pub fn caravan_park(&self, c: &Caravan) -> (f32, f32) {
-            c.stops[Self::caravan_stop(self.caravan_slot(), c.area, c.stops.len())].0
+            c.stops[Self::caravan_stop(self.caravan_slot(), c.area, c.stops.len())]
         }
 
         /// Bu dilimde kervanın durağı
@@ -15991,37 +15578,17 @@ pub mod caravan {
             r.below(n.max(1) as u32) as usize
         }
 
-        /// Kamyoneti ve tüccarı zamana göre yerleştirir (gelir, park eder, gider).
+        /// Tüccarı bu dilimin durağına yerleştirir.
         pub(crate) fn update_caravans(&mut self) {
-            let clock = self.caravan_clock();
-            let slot = (clock / SLOT) as i64;
-            let t = (clock - slot as f64 * SLOT) as f32;
+            let slot = self.caravan_slot();
             for c in self.caravans.iter_mut() {
-                let (park, from) = c.stops[Self::caravan_stop(slot, c.area, c.stops.len())];
-                let (u, coming) = if t < DRIVE {
-                    (t / DRIVE, true)
-                } else if t > SLOT as f32 - DRIVE {
-                    ((SLOT as f32 - t) / DRIVE, false)
-                } else {
-                    (1.0, true)
-                };
-                // yumuşak kalkış/duruş
-                let e = u * u * (3.0 - 2.0 * u);
-                c.x = from.0 + (park.0 - from.0) * e;
-                c.y = from.1 + (park.1 - from.1) * e;
-                let (dx, dy) = if coming { (park.0 - from.0, park.1 - from.1) } else { (from.0 - park.0, from.1 - park.1) };
-                c.angle = dx.atan2(dy);
-                c.parked = u >= 1.0;
-                c.speed = if c.parked { 0.0 } else { ROAD / DRIVE };
-                // tüccar park edince kamyonetin solunda iner; yoldayken görünmez
+                let park = c.stops[Self::caravan_stop(slot, c.area, c.stops.len())];
+                c.x = park.0;
+                c.y = park.1;
+                c.parked = true;
                 if let Some(n) = self.npcs.get_mut(c.npc) {
-                    if c.parked {
-                        n.x = park.0 - 2.6 * TILE;
-                        n.y = park.1 - 0.5 * TILE;
-                    } else {
-                        n.x = -10_000.0;
-                        n.y = -10_000.0;
-                    }
+                    n.x = park.0;
+                    n.y = park.1;
                 }
             }
         }
@@ -16043,7 +15610,7 @@ pub mod caravan {
         pub fn near_caravan(&self) -> Option<usize> {
             let (px, py) = (self.player.x, self.player.y);
             self.caravans.iter().position(|c| {
-                c.parked && self.npcs.get(c.npc).is_some_and(|n| (n.x - px).hyp(n.y - py) < 150.0 || (c.x - px).hyp(c.y - py) < 180.0)
+                c.parked && self.npcs.get(c.npc).is_some_and(|n| (n.x - px).hyp(n.y - py) < 150.0)
             })
         }
 
@@ -16083,7 +15650,7 @@ pub mod caravan {
         /// Kervandan satın alma (havuz sırası `i`, adet `n`)
         pub fn caravan_buy(&mut self, i: usize, n: u32) -> Result<String, String> {
             if self.near_caravan().is_none() {
-                return Err("Tüccar Marco'nun kamyonetinin yanına git".into());
+                return Err("Tüccar Marco'nun yanına git".into());
             }
             let slot = self.caravan_slot();
             let area = areas::area_at(self.player.x, self.player.y);
@@ -16154,10 +15721,8 @@ pub mod caravan {
             let stock = Game::caravan_stock(g.caravan_slot(), areas::area_at(g.player.x, g.player.y));
             let &(i, _) = stock.iter().find(|(i, _)| POOL[*i].3 <= g.progress.level).expect("satılık mal");
             assert!(g.caravan_buy(i, 1).is_ok());
-            // dilim başı: yolda, satış yok
-            g.base_clock = (SLOT * 5001.0 + 2.0) * 1000.0;
-            g.update_caravans();
-            assert!(!g.caravans[0].parked);
+            // tüccardan uzaklaşınca satış yok
+            g.player.x += 2000.0;
             assert!(g.caravan_buy(i, 1).is_err());
         }
     }
@@ -16327,11 +15892,10 @@ mod training {
         /// V16 öğreticisi: balta üret → kuşan → ağaç kes → kazma üret → kaya kır → bıçak üret → kuşan
         #[test]
         fn tool_tutorial_steps_in_order() {
-            use crate::story::Ev;
             let ids: Vec<&str> = GUIDE.iter().map(|q| q.id).collect();
             let at = |id: &str| ids.iter().position(|x| *x == id).unwrap();
-            assert!(at("g4b") < at("g4c") && at("g4c") < at("g4a") && at("g4a") < at("g4d"));
-            assert!(at("g4d") < at("g4e") && at("g4e") < at("g4f") && at("g4f") < at("g4g") && at("g4g") < at("g5"));
+            assert!(at("g4b") < at("g4c") && at("g4c") < at("g4a") && at("g4a") < at("g4f"));
+            assert!(at("g4f") < at("g4g") && at("g4g") < at("g5"));
             let mut p = Progress::default();
             p.story.guide_v = 3;
             p.story.guide = at("g4c");
@@ -16346,14 +15910,6 @@ mod training {
             g.story_tick();
             g.story_tick();
             assert_eq!(GUIDE[g.progress.story.guide].id, "g4a", "balta kuşanınca teslim edilmeli");
-            // kaya kırma adımı kaya olayıyla ilerler
-            g.progress.story.guide = at("g4e");
-            g.progress.story.guide_on = false;
-            g.story_tick();
-            assert!(g.progress.story.guide_on);
-            g.story_event(Ev::Mine);
-            g.story_tick();
-            assert_eq!(GUIDE[g.progress.story.guide].id, "g4f");
             // son adım: sopayı kuşan
             g.progress.story.guide = at("g4g");
             g.progress.story.guide_on = false;
@@ -16395,7 +15951,7 @@ mod training {
             assert_eq!(ping_name("yok"), None);
             let ids: Vec<&str> = GUIDE.iter().map(|q| q.id).collect();
             let at = |id: &str| ids.iter().position(|x| *x == id).unwrap();
-            assert!(at("g4g") < at("g4h") && at("g4h") < at("g4i") && at("g4i") < at("g5") && at("g5") < at("g5b") && at("g5b") < at("g6"));
+            assert!(at("g4g") < at("g4h") && at("g4h") < at("g5") && at("g5") < at("g5b") && at("g5b") < at("g6"));
             assert!(at("g6") < at("g6s") && at("g6s") < at("g6b") && at("g6b") < at("g6c") && at("g6c") < at("g6d"));
             assert!(at("g6f") < at("g7") && at("g7") < at("g7b") && at("g7b") < at("g8"));
             // Ping adımı: olay gelince ilerler
@@ -16441,11 +15997,6 @@ mod training {
             assert_ne!(GUIDE[g.progress.story.guide].id, "g5b");
         }
 
-        /// Kaya kırınca günlük "12 kaya kır" ve rehber adımı ilerler
-        #[test]
-        fn mining_counts_for_daily_quest() {
-            assert!(crate::data::DAILY_POOL.iter().any(|d| d.id == "d_mine" && d.kind == crate::data::QuestKind::Mine && d.goal == 12));
-        }
     }
 }
 pub mod net {
@@ -17930,7 +17481,6 @@ pub fn world_json(g: &Game) -> String {
         "ground_names": world::World::ground_names(),
         "statics": w.statics.len(),
         "merchants": w.merchants,
-        "benches": w.benches,
         "camp": world::CAMP,
         "npcs": g.npcs.iter().filter(|n| matches!(n.kind, 1..=5 | 7 | 8)).map(|n| { let (name, role) = story::npc_name(n.kind); json!([name, role, n.x, n.y, n.kind]) }).collect::<Vec<_>>(),
         "landmarks": world::LANDMARKS.iter().map(|l| { let (x, y) = l.pos(); json!([l.name, x, y, l.safe]) }).collect::<Vec<_>>(),

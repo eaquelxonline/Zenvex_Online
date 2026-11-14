@@ -779,7 +779,7 @@ class Sprite(val page: Int, val src: AndroidRect, val ax: Float, val ay: Float, 
 }
 
 /** Hep bellekte kalan atlas grupları (oyunun her yerinde çizilir) */
-private val KEEP = setOf("world", "props", "items", "npc6", "npcs", "vehicles", "regions")
+private val KEEP = setOf("world", "props", "items", "regions")
 
 /**
  * tools/assetgen/pack.py çıktısı (assets/v2). Sayfalar gruplar halinde tembel yüklenir;
@@ -890,13 +890,6 @@ class Atlas private constructor(ctx: Context) {
         val a = attach.optJSONObject(actor)?.optJSONObject(key)?.optJSONArray(point) ?: return null
         if (a.length() < 4) return null
         return FloatArray(4) { a.getDouble(it).toFloat() }
-    }
-
-    /** Etkinlik silahının elde tutma verisi: [kabza x, kabza y, uç x, uç y, boy katsayısı] (doku pikseli) */
-    fun evWeapon(id: String): FloatArray? {
-        val o = attach.optJSONObject("w/ev")?.optJSONObject(id) ?: return null
-        val g = o.getJSONArray("grip"); val t = o.getJSONArray("tip")
-        return floatArrayOf(g.getDouble(0).toFloat(), g.getDouble(1).toFloat(), t.getDouble(0).toFloat(), t.getDouble(1).toFloat(), o.optDouble("len", 1.0).toFloat())
     }
 
     private val dst = RectF()
@@ -2926,8 +2919,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
     private val weaponSprites: Array<String>
     /** silah dizini → 3B model ("" yumruk) */
     private val weaponModels: Array<String>
-    /** etkinlik silahları (ev_<etkinlik>_weapon): elde w/ev_<etkinlik> çizilir, animasyon katana / bıçak karelerinden */
-    private val evWeapons: Array<String?>
     private val itemIds: Array<String>
     private val itemSprites: Array<Sprite?>
     private val zones: Array<String>
@@ -2955,7 +2946,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         val wp = w.getJSONArray("weapons")
         weaponSprites = Array(wp.length()) { wp.getJSONArray(it).getString(1) }
         weaponModels = Array(wp.length()) { Model3D.itemModel(wp.getJSONArray(it).getString(0)) }
-        evWeapons = Array(wp.length()) { i -> wp.getJSONArray(i).getString(0).takeIf { it.startsWith("ev_") }?.removePrefix("ev_")?.removeSuffix("_weapon") }
         val it2 = w.getJSONArray("items")
         itemIds = Array(it2.length()) { it2.getJSONArray(it).getString(0) }
         itemSprites = Array(itemIds.size) { atlas["i/" + itemIds[it]] ?: atlas["s/" + itemIds[it]] }
@@ -3775,7 +3765,7 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         plates.clear()
         crowdPrev = crowdNow; crowdNow = 0; platesNow = 0
         nearNpc = -1; nearNpcD = Float.MAX_VALUE
-        npcBoxes.clear(); benchBoxes.clear(); synchronized(playerBoxes) { playerBoxes.clear() }
+        npcBoxes.clear(); synchronized(playerBoxes) { playerBoxes.clear() }
         val px = hud[Native.PX]; val py = hud[Native.PY]
         for (i in 0 until drawN) {
             val o = i * Native.STRIDE
@@ -3808,7 +3798,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
             drawHud(c)
             drawBaseHud(c)
             drawControls(c)
-            drawBuild(c)
             drawTutorial(c)
             publishGuideTargets()
         }
@@ -3930,25 +3919,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         } else atlas.draw(c, sp, sx, sy, scale, paint)
         val hp = drawBuf[o + 8]
         if (hp >= 0) bar(c, sx, sy - sp.ay * sp.k * scale * 0.55f, 46 * density, hp, 0xFFE0C060.toInt())
-        // tezgâh: yakındayken yerde nabız gibi atan halka ve üstünde çekiçli rozet (dokununca üretim açılır)
-        if (kind == 9) {
-            val dd = hypot(x - px, y - py)
-            val top = sy - sp.ay * sp.k * scale
-            benchBoxes += floatArrayOf(sx - sp.w * sp.k * scale * 0.5f, top, sx + sp.w * sp.k * scale * 0.5f, sy + 6 * density, dd)
-            if (dd < 520f) {
-                val a = ((520f - dd) / 200f).coerceIn(0f, 1f)
-                val ph = (time * 1.2f) % 1f
-                stroke.color = alphaC(0xFFFFC85A.toInt(), a * 0.75f * (1f - ph)); stroke.strokeWidth = 2f * density
-                val rr = sp.w * sp.k * scale * (0.55f + 0.25f * ph)
-                c.drawOval(sx - rr, sy - rr * 0.36f, sx + rr, sy + rr * 0.36f, stroke)
-                val by = top - (14 + sin(time * 3f) * 3f) * density
-                val br = 13 * density
-                fill.color = alphaC(0xE01E1A12.toInt(), a); c.drawCircle(sx, by, br, fill)
-                stroke.color = alphaC(0xFFFFC85A.toInt(), a); stroke.strokeWidth = 2f * density; c.drawCircle(sx, by, br, stroke)
-                drawIcon(c, "craft", sx, by, br * 1.1f, alphaC(0xFFFFE6A8.toInt(), a))
-                if (dd < 300f) drawText(c, "Tezgâh · Dokun", sx, by - br - 5 * density, 10.5f * density, alphaC(0xFFFFE6A8.toInt(), a), center = true)
-            }
-        }
         // ışık kaynakları
         if (kind == 7 || kind == 8) {
             val night = 1f - hud[Native.LIGHT]
@@ -3996,28 +3966,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         if (dir in 3..5 && atlas.has(spriteKey(prefix, anim, 4, f))) { viewFlip = false; return 4 }
         viewFlip = dir in 1..3
         return 0
-    }
-
-    /**
-     * Etkinlik silahı: kahramanın aynı karesinin katana / bıçaklı halinden çıkarılmış kabza→uç doğrusu boyunca
-     * (manifest attach "w_katana" / "w_knife", tools/pixel/event_import.py) silah görseli döndürülüp ölçeklenerek çizilir.
-     */
-    private fun drawEvWeapon(c: AndroidCanvas, prefix: String, key: String, id: String, cls: String, sx: Float, sy: Float, s: Float, flip: Boolean) {
-        val seg = atlas.attach4(prefix, key.substringAfter("$prefix/"), "w_$cls") ?: return
-        val ws = atlas["w/ev_$id"] ?: return
-        val m = atlas.evWeapon(id) ?: return
-        val f = if (flip) -1f else 1f
-        val gx = seg[0] * s * f; val gy = seg[1] * s
-        val tx = seg[2] * s * f; val ty = seg[3] * s
-        val len = hypot(tx - gx, ty - gy)
-        val wl = hypot(m[2] - m[0], m[3] - m[1])
-        if (len < 1f || wl < 1f) return
-        val ang = Math.toDegrees(atan2((ty - gy).toDouble(), (tx - gx).toDouble()) - atan2((m[3] - m[1]).toDouble(), (m[2] - m[0]).toDouble()))
-        c.save()
-        c.translate(sx + gx, sy + gy)
-        c.rotate(ang.toFloat())
-        atlas.draw(c, ws, 0f, 0f, len * m[4] / wl / ws.k, pixelPaint)
-        c.restore()
     }
 
     // ------------------------------------------------------------------ kalabalık için sprite arama önbelleği
@@ -4094,8 +4042,7 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
             val flip = pix && viewFlip
             var key = spriteKey(prefix, anim, kdir, f)
             // elde gerçek silahla render edilmiş kare varsa onu kullan
-            val evw = if (wIdx > 0) evWeapons.getOrNull(wIdx) else null
-            val wKey = if (evw != null) null else if (wIdx > 0) "$key@" + weaponSprites.getOrElse(wIdx) { "" } else if (ch == 4) "$key@m4" else null
+            val wKey = if (wIdx > 0) "$key@" + weaponSprites.getOrElse(wIdx) { "" } else if (ch == 4) "$key@m4" else null
             var weaponBaked = false
             var sp = if (wKey != null) atlas[wKey]?.also { weaponBaked = true } else null
             if (sp == null) sp = atlas[key]
@@ -4144,7 +4091,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                 }
             }
             atlas.draw(c, sp, sx, sy, scale, paint, flip)
-            if (evw != null && isHero) drawEvWeapon(c, prefix, key, evw, weaponSprites.getOrElse(wIdx) { "katana" }, sx, sy, scale * sp.k, flip)
             if (isHero) {
                 if (sp.k == 1f) { // eski (düşük yoğunluklu) karakterlerde ceket/bot katmanı
                     if (boots.isNotEmpty()) { gear("boots_$boots", "lfoot"); gear("boots_$boots", "rfoot") }
@@ -4411,72 +4357,22 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
     /** dokunarak menü açmak için uzak oyuncuların ekran kutuları */
     private class PlayerBox(val l: Float, val t: Float, val r: Float, val b: Float, val uid: String, val name: String)
     private val playerBoxes = ArrayList<PlayerBox>()
-    /** dokunarak üretim açmak için tezgâhların ekran kutuları: sol, üst, sağ, alt, oyuncuya uzaklık */
-    private val benchBoxes = ArrayList<FloatArray>()
     /** dokunarak konuşmak için NPC'lerin ekran kutuları: ch, sol, üst, sağ, alt */
     private val npcBoxes = ArrayList<FloatArray>()
-    private val npc6Bmp = HashMap<String, android.graphics.Bitmap?>()
-    private val meshW = 4
-    private val meshH = 10
-    private val meshVerts = FloatArray((meshW + 1) * (meshH + 1) * 2)
     /** Yakındaki konuşulabilir NPC (karakter kodu 5-9), her karede çizim sırasında güncellenir. */
     private var nearNpc = -1
     private var nearNpcD = Float.MAX_VALUE
 
     /**
-     * Piksel NPC: tek görsel, çalışma anında ızgara (mesh) ile canlandırılır — göğüs nefesle genişler ve kalkar,
-     * üst gövde hafifçe salınır; ek animasyon karesi yok (APK'ya yük yok). Görseller sağa bakar; oyuncu soldaysa aynalanır.
+     * NPC: V22'den beri yalnız 3B model (2B piksel kareler kalktı). Model yoksa ya da 3B kapalıysa false döner ve
+     * NPC sıradan insan gibi çizilir.
      */
     private fun drawNpc6(c: AndroidCanvas, ch: Int, x: Float, y: Float, sx: Float, sy: Float, dir: Int, t: Float): Boolean {
-        val name = npc6Names.getOrNull(ch - 4) ?: return false
-        // büyücü görseli yoksa görevci görseli mor tonla
-        val key = when {
-            name == "wizard" && atlas["npc/wizard"] == null -> "npc/quest"
-            else -> "npc/$name"
-        }
-        // V13 Gezgin Tüccar Marco: 5 yönlü bekleme animasyonu (batı yanı doğunun aynası)
-        val marco = if (ch == 5) {
-            val f = frameOf(atlas.anims("n/marco", atlas.zombieAnims), "idle", t + ch * 0.37f)
-            val (d5, fl) = if (dir >= 5) (8 - dir) to true else dir to false
-            atlas["n/marco/idle_${d5}_$f"]?.let { it to fl }
-        } else null
-        val w: Float; val top: Float
+        if (npc6Names.getOrNull(ch - 4) == null) return false
         val px0 = hud[Native.PX]; val py0 = hud[Native.PY]
         val near = ch >= 5 && kotlin.math.hypot(px0 - x, py0 - y) < 170f
-        val f3 = drawNpc3D(c, ch, x, y, sx, sy, dir, t, near)
-        if (f3 != null) {
-            w = f3[0]; top = f3[1]
-        } else if (marco != null) {
-            val (msp, fl) = marco
-            val k = msp.k * scale
-            w = msp.w * k; top = sy - msp.ay * k
-            castShadow(c, sx, sy, w * 0.6f) { p -> atlas.draw(c, msp, sx, sy, scale, p, fl) }
-            atlas.draw(c, msp, sx, sy, scale, pixelPaint, fl)
-        } else {
-            val sp = atlas[key] ?: return false
-            val bmp = npc6Bmp.getOrPut(key) { atlas.extract(key) } ?: return false
-            val k = sp.k * scale
-            w = sp.w * k; val h = sp.h * k
-            val left = sx - sp.ax * k; top = sy - sp.ay * k
-            val flip = dir in 5..7
-            val ph = ch * 1.7f
-            val breath = sin(t * 2.1f + ph)
-            val sway = sin(t * 1.05f + ph * 0.6f)
-            var i = 0
-            for (j in 0..meshH) {
-                val v = j.toFloat() / meshH
-                val up = ((0.62f - v) / 0.62f).coerceIn(0f, 1f)
-                for (q in 0..meshW) {
-                    val u = q.toFloat() / meshW
-                    var vx = left + u * w + (u - 0.5f) * w * 0.014f * breath * up + sway * w * 0.012f * (1 - v) * (1 - v)
-                    val vy = top + v * h - h * 0.006f * (breath + 1f) * up
-                    if (flip) vx = 2 * sx - vx
-                    meshVerts[i++] = vx; meshVerts[i++] = vy
-                }
-            }
-            castShadow(c, sx, sy, w * 0.6f) { p -> c.drawBitmapMesh(bmp, meshW, meshH, meshVerts, 0, null, 0, p) }
-            c.drawBitmapMesh(bmp, meshW, meshH, meshVerts, 0, null, 0, if (ch == 11 && key == "npc/quest") wizardPaint else pixelPaint)
-        }
+        val f3 = drawNpc3D(c, ch, x, y, sx, sy, dir, t, near) ?: return false
+        val w = f3[0]; val top = f3[1]
         // büyücü: çevresinde yükselen mavi-mor kıvılcımlar
         if (ch == 11 && Settings.current.particles && Math.random() < 0.25)
             particles += Particle(x + ((Math.random() - 0.5) * 70).toFloat(), y - 20f, 10f, 0f, 0f, 90f, 1.1f, 1.1f,
@@ -4523,8 +4419,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
     }
 
     // ------------------------------------------------------------------ V8 devlet üsleri
-    private val wizardPaint = Paint().apply { isFilterBitmap = false; isAntiAlias = false
-        colorFilter = android.graphics.LightingColorFilter(0xFFB8A8FF.toInt(), 0x00180A30) }
     private val friendPaint = Paint().apply { isFilterBitmap = false; isAntiAlias = false
         colorFilter = android.graphics.LightingColorFilter(0xFFC8DCFF.toInt(), 0x00081428) }
     private val deadPaint = Paint().apply { isFilterBitmap = false; isAntiAlias = false }
@@ -5036,12 +4930,11 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         val id = vehicleIds.getOrElse(kind) { "car" }
         // V8: yandan çizilmiş motor ve açık cip (yön: sağa/sola çevrilir, dikey giderken son yön korunur)
         // V11: 8 yönlü çizim varsa (x8/moto/0..7, x8/car/0..7; docs/15 istemleri) araç gittiği yöne döner, yan görünüş kullanılmaz
-        // V12.2: gezgin tüccarın kamyoneti (suv) için ayrı 8 yön (x8/truck, docs/19) varsa o
         val fxDir = dir
         // 3B araç (motosiklet: Nightstalker + sürücü, araba: Hellhound); kare yoksa çizim
         val d3 = (kind == 1 || kind == 2) && drawVehicle3D(c, kind, "v" + drawBuf[o + 10].toInt(), x, y, sx, sy, drawBuf[o + 5], speed, driver, hp, wreck, dir)
         if (!d3) {
-            val d8 = (if (kind == 3) atlas["x8/truck/$dir"] else null) ?: if (kind >= 1) atlas["x8/${if (kind == 1) "moto" else "car"}/$dir"] else null
+            val d8 = if (kind >= 1) atlas["x8/${if (kind == 1) "moto" else "car"}/$dir"] else null
             val sp = d8 ?: atlas["v/$id/$dir"]
             if (sp == null) { placeholder(c, sx, sy, 0xFFB03030.toInt()); return }
             // kendi aracın: Elmas Sandığı araç kaplaması
@@ -6364,12 +6257,9 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
             guideStep == "g4b" -> "Çanta → Üret → Silah Ve Alet sekmesi → Taş Balta → Üret. Parlayan düğmeleri izle; malzemeyi ben verdim."
             guideStep == "g4c" -> "Çantayı aç, parlayan Taş Balta'ya dokun ve Kuşan'a bas: balta ekipman bölümündeki Silah yuvasına oturur."
             guideStep == "g4a" -> "Bir ağaca yürü ve vurmaya devam et: 500 canı var, balta her vuruşta 50 götürür."
-            guideStep == "g4d" -> "Çanta → Üret → Silah Ve Alet sekmesi → Taş Kazma → Üret. Parlayan düğmeleri izle."
-            guideStep == "g4e" -> "Çantadan Taş Kazma'yı kuşan, sonra bir kayaya yürüyüp vurmaya devam et: kaya 500 can taşır, kazma her vuruşta 50 götürür."
             guideStep == "g4f" -> "Çanta → Üret → Silah Ve Alet sekmesi → Sopa → Üret. Malzemeyi ben verdim."
             guideStep == "g4g" -> "Çantayı aç, parlayan Sopa’ya dokun ve Kuşan’a bas. Sopa Silah yuvasına oturur; sağ joystick artık onunla vurur."
             guideStep == "g4h" -> "Çantayı aç; kask ve ceketi sırayla seçip Kuşan'a bas. Zırh, ekipman bölümündeki Kask ve Ceket yuvalarına oturur."
-            guideStep == "g4i" -> "Çantayı aç, Tezgâh'a dokun, Kur'a bas; yerde yeşil çıkan bir noktaya dokunup ✓'e bas. Yakınına gidince üretim ekranı açılır."
             guideStep == "g5" -> "Çantayı aç, parlayan eşyaya basılı tut ve soldaki ceplerden birine sürükle. Cepteki eşya oyunda tek dokunuşla kullanılır."
             guideStep == "g5b" -> "Bandajı cebine koy (çanta → bandaj → Cebe Koy), çantayı kapat ve ekranın altında parlayan cebe dokun."
             guideStep == "g6" -> "Gezgin Tüccar Marco'nun kamyonetini bul (haritada işaretli) ve onunla konuş."
@@ -6486,7 +6376,7 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         }
         // hızlı tuşlar
         btnVehicle.visible = hud[Native.NEAR_VEHICLE] > 0 || hud[Native.IN_VEHICLE] > 0
-        btnInteract.visible = !inVehicleNow() && (hud[Native.NEAR_MERCHANT] > 0 || hud[Native.NEAR_BENCH] > 0 || nearNpc >= 5)
+        btnInteract.visible = !inVehicleNow() && (hud[Native.NEAR_MERCHANT] > 0 || nearNpc >= 5)
         nearCache = Online.nearest(220f)
         val nr = nearCache
         btnTrade.visible = nr != null && nr.dist < 170f && hud[Native.IN_VEHICLE] < 0.5f && rideUid == null
@@ -6504,7 +6394,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         if (btnRide.visible) roundBtn(c, btnRide, if (rideUid != null) "exit" else "car", if (rideUid != null) "İn" else "Yolcu Ol", 0xFF8A5AC0.toInt(), false)
         if (btnInteract.visible) {
             if (nearNpc >= 5 || hud[Native.NEAR_MERCHANT] > 0) roundBtn(c, btnInteract, "chat", "Konuş", 0xFFC08A20.toInt(), false)
-            else if (hud[Native.NEAR_BENCH] > 0) roundBtn(c, btnInteract, "craft", "Tezgâh", 0xFFC08A20.toInt(), false)
             else roundBtn(c, btnInteract, "craft", null, 0xFFC08A20.toInt(), false)
         }
     }
@@ -6711,18 +6600,12 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
                 val id = e.getPointerId(i)
                 val x = e.getX(i) * touchK; val y = e.getY(i) * touchK
                 // inşa modu: dokunuşlar önizlemeyi taşır (joystick ve tuşlar beklemede)
-                if (buildTouch(x, y, id)) return true
                 // mini haritaya dokunma: tam harita
                 if (radarR > 0 && hypot(x - radarCx, y - radarCy) < radarR) { Audio.play("click", 0.7f, bus = Audio.Bus.Ui); ui.onOpen("map"); return true }
                 // başka oyuncuya dokunma: oyuncu menüsü
                 synchronized(playerBoxes) { playerBoxes.firstOrNull { x in it.l..it.r && y in it.t..it.b } }?.let { pb ->
                     Audio.play("click", 0.7f, bus = Audio.Bus.Ui)
                     ui.onOpen("player:${pb.uid}|${pb.name}")
-                    return true
-                }
-                // tezgâha dokunma: üretim (yakındaysa)
-                benchBoxes.firstOrNull { x in it[0]..it[2] && y in (it[1] - 40 * density)..it[3] }?.let { b ->
-                    if (b[4] < 330f) ui.onOpen("craft_bench") else ui.onToast("Tezgâha Yaklaş")
                     return true
                 }
                 // NPC'ye dokunma: konuşma (yakındaysa)
@@ -6747,13 +6630,11 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
             }
             MotionEvent.ACTION_MOVE -> for (i in 0 until e.pointerCount) {
                 val id = e.getPointerId(i)
-                if (buildSlot >= 0 && buildPtr == id) moveBuild(e.getX(i) * touchK, e.getY(i) * touchK)
                 if (moveStick.pointer == id) moveStickTo(moveStick, e.getX(i) * touchK, e.getY(i) * touchK)
                 if (atkStick.pointer == id) moveStickTo(atkStick, e.getX(i) * touchK, e.getY(i) * touchK)
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
                 val id = e.getPointerId(e.actionIndex)
-                if (buildPtr == id || e.actionMasked == MotionEvent.ACTION_CANCEL) buildPtr = -1
                 for (st in listOf(moveStick, atkStick)) if (st.pointer == id || e.actionMasked == MotionEvent.ACTION_CANCEL) {
                     st.pointer = -1; st.vx = 0f; st.vy = 0f; st.cx = st.homeX; st.cy = st.homeY; st.x = st.cx; st.y = st.cy
                 }
@@ -6764,86 +6645,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
         return true
     }
 
-    // ------------------------------------------------------------------ V15 inşa modu (tezgâh kurma)
-    /** kurulacak tezgâhın çanta yuvası (-1: inşa modu kapalı); önizleme parmağı izler, ✓ kurar, ✕ vazgeçer */
-    @Volatile private var buildSlot = -1
-        set(v) { field = v; building.value = v >= 0 }
-    /** inşa modu açık mı (Compose HUD bu sırada gizlenir) */
-    val building = androidx.compose.runtime.mutableStateOf(false)
-    private var buildX = 0f
-    private var buildY = 0f
-    private var buildOk = false
-    private var buildWhy = ""
-    private var buildPtr = -1
-    private val buildYes = RectF()
-    private val buildNo = RectF()
-    private val buildPaint = Paint().apply { alpha = 170; isFilterBitmap = false }
-
-    fun startBuild(slot: Int) {
-        buildX = hud[Native.PX] + 70f; buildY = hud[Native.PY] + 10f
-        buildSlot = slot
-        checkBuild()
-    }
-
-    private fun checkBuild() {
-        val r = GameSession.cmdNoSave("bench_spot", "x" to buildX, "y" to buildY)
-        buildOk = r.ok; buildWhy = r.msg
-    }
-
-    private fun moveBuild(x: Float, y: Float) {
-        // önizleme parmağın biraz üstünde (parmak tezgâhı örtmesin)
-        buildX = (x - sw / 2f) / scale + camX
-        buildY = (y - 36 * density - sh / 2f) / scale + camY
-        checkBuild()
-    }
-
-    /** true: dokunuş inşa modunda kullanıldı */
-    private fun buildTouch(x: Float, y: Float, id: Int): Boolean {
-        if (buildSlot < 0) return false
-        when {
-            buildYes.contains(x, y) -> {
-                if (!buildOk) { ui.onToast(buildWhy.ifEmpty { "Buraya kurulamaz" }); return true }
-                val r = GameSession.cmd("place_bench", "slot" to buildSlot, "x" to buildX, "y" to buildY)
-                ui.onToast(r.msg)
-                if (r.ok) { buildSlot = -1; Audio.play("craft"); fx("dust", buildX, buildY, 140f); shake(2f, 0.1f) }
-            }
-            buildNo.contains(x, y) -> { buildSlot = -1; Audio.play("click", 0.7f, bus = Audio.Bus.Ui) }
-            else -> { buildPtr = id; moveBuild(x, y) }
-        }
-        return true
-    }
-
-    private fun drawBuild(c: AndroidCanvas) {
-        if (buildSlot < 0) return
-        val d = density
-        val col = if (buildOk) 0xFF5BE38A.toInt() else 0xFFFF5A4A.toInt()
-        // menzil halkası (6 karo)
-        val rr = 6 * 64f * scale
-        stroke.color = alphaC(0xFFFFFFFF.toInt(), 0.35f); stroke.strokeWidth = 2 * d
-        c.drawCircle(wx(hud[Native.PX]), wy(hud[Native.PY]), rr, stroke)
-        // yerde renkli halka + yarı saydam tezgâh
-        val gx = wx(buildX); val gy = wy(buildY)
-        val pulse = 0.75f + 0.25f * sin(time * 5f)
-        fill.color = alphaC(col, 0.28f * pulse); c.drawOval(gx - 46 * d, gy - 16 * d, gx + 46 * d, gy + 16 * d, fill)
-        stroke.color = alphaC(col, 0.9f); stroke.strokeWidth = 2.5f * d
-        c.drawOval(gx - 46 * d, gy - 16 * d, gx + 46 * d, gy + 16 * d, stroke)
-        atlas["s/workbench"]?.let { atlas.draw(c, it, gx, gy, scale, buildPaint) }
-        // üst bilgi ve ✓ / ✕
-        // bilgi ve tuşlar alt ortada (inşa modunda Compose HUD gizli; joystick'lerle çakışmaz)
-        val bx = sw / 2f; val by = sh - 64 * d; val br = 28 * d
-        fill.color = 0xC0141210.toInt()
-        rect.set(bx - 130 * d, by - br - 46 * d, bx + 130 * d, by + br + 10 * d); c.drawRoundRect(rect, 8 * d, 8 * d, fill)
-        drawText(c, if (buildOk) "Tezgâhı buraya kur?" else buildWhy.ifEmpty { "Buraya kurulamaz" }, bx, by - br - 24 * d, 14 * d, col, center = true)
-        drawText(c, "Yeri seçmek için dokun ya da sürükle", bx, by - br - 8 * d, 10 * d, 0xFFE8E0C8.toInt(), center = true)
-        buildYes.set(bx + 16 * d, by - br, bx + 16 * d + 2 * br, by + br)
-        buildNo.set(bx - 16 * d - 2 * br, by - br, bx - 16 * d, by + br)
-        for ((r, ok) in listOf(buildYes to true, buildNo to false)) {
-            fill.color = if (ok) alphaC(if (buildOk) 0xFF2E8A4A.toInt() else 0xFF4A4A40.toInt(), 0.95f) else 0xF08A2A22.toInt()
-            c.drawCircle(r.centerX(), r.centerY(), br, fill)
-            stroke.color = 0xFFFFFFFF.toInt(); stroke.strokeWidth = 2 * d; c.drawCircle(r.centerX(), r.centerY(), br, stroke)
-            drawText(c, if (ok) "✓" else "✕", r.centerX(), r.centerY() + 9 * d, 26 * d, 0xFFFFFFFF.toInt(), center = true)
-        }
-    }
 
     private fun moveStickTo(st: Stick, x: Float, y: Float) {
         val s = Settings.current
@@ -6896,8 +6697,6 @@ class GameView(context: Context, private val ui: GameUi) : SurfaceView(context),
             "interact" -> when {
                 nearNpc >= 5 -> ui.onOpen("npc:${nearNpc - 4}")
                 hud[Native.NEAR_MERCHANT] > 0 -> ui.onOpen("npc:1")
-                // V15 (R8): tezgâhın yanında tezgâh tarifleri açılır (önceden el üretimi açılıyordu)
-                hud[Native.NEAR_BENCH] > 0 -> ui.onOpen("craft_bench")
                 else -> ui.onOpen("craft")
             }
             "trade" -> nearCache?.let { Online.requestTrade(it.uid); ui.onOpen("trade") }
@@ -7694,7 +7493,8 @@ object Native {
     const val DEAD = 12; const val SHIELD = 13; const val LIGHT = 14; const val WEAPON = 15
     const val MAG = 16; const val AMMO = 17; const val RELOADING = 18; const val ABILITY_CD = 19
     const val CHARACTER = 20; const val CHAR_LEVEL = 21; const val NEAR_VEHICLE = 22; const val NEAR_MERCHANT = 23
-    const val NEAR_BENCH = 24; const val IN_VEHICLE = 25; const val FUEL = 26; const val VEHICLE_HP = 27
+    /** 24: boş (V22: tezgâh kalktı) */
+    const val IN_VEHICLE = 25; const val FUEL = 26; const val VEHICLE_HP = 27
     const val BOSS_HP = 28; const val BOSS_MAX = 29; const val POISON = 30; const val ZONE = 31
     const val SPEED_T = 32; const val POWER_T = 33; const val HEAL_T = 34; const val POT_CD0 = 35
     const val FOOD_T = 38; const val ENERGY_T = 39
@@ -10371,7 +10171,7 @@ fun ItemPickerDialog(title: String, close: () -> Unit, maxAmount: Int = 9999, pi
 
 private val ITEM_KIND_TR = mapOf("" to "Hepsi", "Weapon" to "Silah", "Tool" to "Alet", "Helmet" to "Kask", "Jacket" to "Ceket", "Pants" to "Pantolon",
     "Boots" to "Bot", "Bag" to "Çanta", "Ring" to "Yüzük", "Necklace" to "Kolye", "Consumable" to "Tüketim", "Material" to "Malzeme",
-    "Chest" to "Sandık", "Bench" to "Tezgâh", "Vehicle" to "Araç", "Part" to "Parça")
+    "Chest" to "Sandık", "Vehicle" to "Araç", "Part" to "Parça")
 
 // ====================================================================================================
 // com/zenvex/online/ui/Bag.kt
@@ -10481,13 +10281,13 @@ private class DragState {
 internal class AmountAsk(val action: String, val slot: Int, val max: Int, val start: Int, val title: String)
 
 @Composable
-fun InventoryScreen(back: () -> Unit, inGame: Boolean = false, onBuild: ((Int) -> Unit)? = null, onCraft: (() -> Unit)? = null) {
+fun InventoryScreen(back: () -> Unit, inGame: Boolean = false, onCraft: (() -> Unit)? = null) {
     var tick by remember { mutableIntStateOf(0) }
     val inv = remember(tick) { GameSession.ui("inventory") }
     val hero = remember(tick / 20) { GameSession.ui("profile").optInt("character") }
     // bekleme süreleri akarken cepleri tazele
     LaunchedEffect(Unit) { while (true) { delay(500); tick++ } }
-    BagView(inv, hero, inGame, back, { name, kv -> GameSession.cmd(name, *kv) }, onCraft = onCraft, onBuild = onBuild) { tick++ }
+    BagView(inv, hero, inGame, back, { name, kv -> GameSession.cmd(name, *kv) }, onCraft = onCraft) { tick++ }
 }
 
 private val EQ_LEFT = listOf("helmet" to "Kask", "jacket" to "Ceket", "pants" to "Pantolon", "boots" to "Bot")
@@ -10506,7 +10306,7 @@ private val BagPanel2 = Color(0xA82B2B26)
 internal fun BagView(
     inv: JSONObject, hero: Int, inGame: Boolean, back: () -> Unit,
     cmd: (String, Array<Pair<String, Any>>) -> GameSession.Reply, onCraft: (() -> Unit)? = null,
-    onBuild: ((Int) -> Unit)? = null, refresh: () -> Unit,
+    refresh: () -> Unit,
 ) {
     var sel by remember { mutableStateOf<Int?>(null) }
     var selEq by remember { mutableStateOf<String?>(null) }
@@ -10697,10 +10497,10 @@ internal fun BagView(
                         val count = item.optInt("count", 1)
                         val kind = item.optString("kind")
                         val s = sel
-                        // onarım: tezgâhta ya da Tamirci Viktor'un yanında (bedel eksik canla orantılı)
+                        // onarım: Tamirci Viktor'un yanında (bedel eksik canla orantılı)
                         if (item.optInt("dur", 100) < 100 && (s != null || selEq != null)) {
                             val near = inv.optBoolean("can_repair")
-                            PxButton(if (near) "Onar · ${item.optInt("repair")} Altın" else "Onar (Tezgâh/Viktor)", Modifier.fillMaxWidth().padding(bottom = 4.dp),
+                            PxButton(if (near) "Onar · ${item.optInt("repair")} Altın" else "Onar (Viktor)", Modifier.fillMaxWidth().padding(bottom = 4.dp),
                                 color = Color(0xFF8A6A3A), height = 34.dp, size = 12.sp, enabled = near, icon = "hammer") {
                                 val r = if (s != null) cmd("repair", arrayOf("slot" to s)) else cmd("repair", arrayOf("eq" to selEq!!))
                                 Toaster.show(r.msg, r.ok); refresh()
@@ -10712,10 +10512,6 @@ internal fun BagView(
                             val key = item.optString("id").startsWith("veh_") && inGame
                             val vehItem = item.optString("id").startsWith("veh_")
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                // V15 (R8b): tezgâh → inşa modu (yeri parmakla seç, ✓ ile kur)
-                                if (kind == "Bench" && onBuild != null) PxButton("Kur", Modifier.fillMaxWidth().tutRect(tutR, "act"), icon = "hammer", height = 38.dp, size = 14.sp) {
-                                    sel = null; onBuild(s)
-                                }
                                 if (equippable || usable || key) PxButton(when { equippable -> "Kuşan"; key -> "Aracı Çağır"; else -> "Kullan" },
                                     Modifier.fillMaxWidth().tutRect(tutR, "act"), height = 38.dp, size = 14.sp) {
                                     val r = cmd("use", arrayOf("slot" to s)); Toaster.show(r.msg, r.ok); sel = null; refresh()
@@ -10913,7 +10709,7 @@ private fun TutorialBagLayer(
     tut: Map<String, Rect>, rects: Map<Int, Rect>, inv: JSONObject, hasCraft: Boolean, craftHand: Boolean = false,
 ) {
     // rehber dışı (ana görev) el üretimi: Üret düğmesi parlar
-    if (step !in setOf("g4", "g4b", "g4d", "g4f", "g4c", "g4e", "g4g", "g4h", "g4i", "g5", "g5b") && craftHand && hasCraft) {
+    if (step !in setOf("g4", "g4b", "g4f", "g4c", "g4g", "g4h", "g5", "g5b") && craftHand && hasCraft) {
         TutLayer(listOf(TutTarget(tut["craft"], "Üret'e Bas", below = true)), "Görevin bir üretim istiyor: Üret'e bas, istenen tarif parlayacak.")
         return
     }
@@ -10921,26 +10717,23 @@ private fun TutorialBagLayer(
     val tg = ArrayList<TutTarget>()
     var text: String? = null
     when (step) {
-        "g4", "g4b", "g4d", "g4f" -> if (hasCraft) {
+        "g4", "g4b", "g4f" -> if (hasCraft) {
             tg += TutTarget(tut["craft"], "Üret'e Bas", below = true)
             text = when (step) {
                 "g4" -> "Üst şeritteki parlayan Üret düğmesine bas. Açılan ekranda Şifa sekmesinden Bandaj'ı seçip Üret'e basacaksın."
                 "g4b" -> "Üret düğmesine bas; Silah Ve Alet sekmesinden Taş Balta'yı seç ve Üret'e bas. Malzemeyi sana ben verdim."
-                "g4d" -> "Üret düğmesine bas; Silah Ve Alet sekmesinden Taş Kazma'yı seç ve Üret'e bas."
                 else -> "Üret düğmesine bas; Silah Ve Alet sekmesinden Sopa’yı seç ve Üret'e bas."
             }
         }
-        "g4c", "g4e", "g4g", "g4h", "g4i", "g5", "g5b" -> {
+        "g4c", "g4g", "g4h", "g5", "g5b" -> {
             val from = if (step == "g5" || step == "g5b") pockets else 0
             val idx = (from until n).firstOrNull { i ->
                 val o = slots?.optJSONObject(i) ?: return@firstOrNull false
                 val id = o.optString("id"); val kind = o.optString("kind")
                 when (step) {
                     "g4c" -> id.startsWith("t_axe_")
-                    "g4e" -> id.startsWith("t_pick_")
                     "g4g" -> id == "w_bat"
                     "g4h" -> id == "helm_basic" || id == "jacket_basic"
-                    "g4i" -> kind == "Bench"
                     "g5" -> kind == "Consumable"
                     else -> id == "bandage"
                 }
@@ -10956,7 +10749,7 @@ private fun TutorialBagLayer(
                 val picked = sel == idx
                 val pocketFree = (0 until pockets).firstOrNull { slots?.isNull(it) != false } ?: 0
                 val pocket = rects[pocketFree]
-                val wear = step == "g4c" || step == "g4e" || step == "g4g" || step == "g4h"
+                val wear = step == "g4c" || step == "g4g" || step == "g4h"
                 when {
                     dragging -> if (step == "g5" || step == "g5b") {
                         tg += TutTarget(pocket, "Burada Bırak", tap = false)
@@ -10967,10 +10760,8 @@ private fun TutorialBagLayer(
                         if (step == "g5" || step == "g5b") tg += TutTarget(pocket, "Buraya Sürükle", tap = false)
                         text = when (step) {
                             "g4c" -> "Parlayan Taş Balta'ya dokun: seçilince sağ panelde bilgisi ve Kuşan düğmesi çıkar."
-                            "g4e" -> "Parlayan Taş Kazma'ya dokun ve Kuşan'a bas: kazma yalnız elindeyken kayaya güçlü vurur."
                             "g4g" -> "Parlayan Bıçağa dokun: seçilince sağ panelde bilgisi ve Kuşan düğmesi çıkar."
                             "g4h" -> "Parlayan kask ya da ceketi seç. İkisini de giyeceksin, sırayla dokun."
-                            "g4i" -> "Parlayan Tezgâh'a dokun: sağ panelde Kur düğmesi çıkar."
                             else -> "Parlayan eşyaya parmağını yarım saniye basılı tut, sonra soldaki parlayan cebe sürükleyip bırak. Dokunup Cebe Koy'u seçmek de olur."
                         }
                     }
@@ -10981,10 +10772,6 @@ private fun TutorialBagLayer(
                                 tg += TutTarget(tut["act"], "Kuşan'a Bas")
                                 eqKeyFor(kind)?.let { tg += TutTarget(rects[it], "Buraya Oturur", tap = false) }
                                 text = "Kuşan'a bas: eşya parlayan ekipman yuvasına oturur. Çıkarmak istersen yuvadan dışarı sürüklersin."
-                            }
-                            step == "g4i" -> {
-                                tg += TutTarget(tut["act"], "Kur'a Bas")
-                                text = "Kur'a bas, sonra yerde yeşil çıkan bir noktaya dokunup ✓ ile tezgâhı yerleştir."
                             }
                             else -> {
                                 tg += TutTarget(tut["act"], "Cebe Koy'a Bas")
@@ -12908,11 +12695,6 @@ object Demo {
 // com/zenvex/online/ui/Dialog.kt
 // ====================================================================================================
 
-/** NPC portre görseli (atlas npc/<ad>) */
-fun npcSprite(kind: Int) = when (kind) {
-    1 -> "npc/merchant"; 2 -> "npc/quest"; 3 -> "npc/doctor"; 4 -> "npc/mechanic"; 5 -> "npc/trainer"; 7 -> "npc/wizard"; else -> null
-}
-
 /** Oyun içinde NPC'ye dokununca: konuşma (Rust talk komutu). */
 @Composable
 fun NpcDialogScreen(kind: Int, close: () -> Unit, open: (String) -> Unit) {
@@ -12969,7 +12751,7 @@ internal fun NpcDialogView(d: JSONObject, onOption: (String) -> Unit, onClose: (
             // portre
             Box(Modifier.size(170.dp, 220.dp), contentAlignment = Alignment.BottomCenter) {
                 // 3B model konuşma animasyonuyla; model yoksa eski görsel
-                if (!Npc3DView(d.optInt("npc"), t)) npcSprite(d.optInt("npc"))?.let { SpriteImage(it, Modifier.fillMaxSize().offset(y = (sin(t * 2f) * 1.5f).dp)) }
+                Npc3DView(d.optInt("npc"), t)
             }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
@@ -13363,14 +13145,14 @@ private val SEE_THROUGH = setOf(Overlay.None, Overlay.Menu, Overlay.Npc, Overlay
 
 /** Oyunu tamamen örten (opak, tam ekran) pencereler */
 private val FULL_OVERLAYS = setOf(
-    Overlay.Settings, Overlay.Bag, Overlay.Craft, Overlay.CraftBench, Overlay.Merchant, Overlay.Map, Overlay.Quests, Overlay.Pass,
+    Overlay.Settings, Overlay.Bag, Overlay.Craft, Overlay.Merchant, Overlay.Map, Overlay.Quests, Overlay.Pass,
     Overlay.Crate, Overlay.Event, Overlay.Skills, Overlay.Me, Overlay.Mail, Overlay.Clan, Overlay.Top, Overlay.Cheat, Overlay.Garage,
     Overlay.PlayerProfile, Overlay.WizardMap, Overlay.Shop, Overlay.Chars,
 )
 
 internal enum class Overlay {
     None, Menu, Settings, Bag, Craft, Merchant, Chat, Map, Dead, Trade,
-    Quests, Pass, Crate, Event, Skills, Me, Mail, Clan, Top, Cheat, Dog, Npc, Garage, Player, PlayerProfile, WizardMap, CraftBench, Shop, Chars,
+    Quests, Pass, Crate, Event, Skills, Me, Mail, Clan, Top, Cheat, Dog, Npc, Garage, Player, PlayerProfile, WizardMap, Shop, Chars,
 }
 
 /**
@@ -13398,7 +13180,7 @@ fun GameScreen(toLobby: () -> Unit) {
                     }
                     if (panel.startsWith("npc:")) { npcKind = panel.substring(4).toIntOrNull() ?: 1; overlay = Overlay.Npc; return@post }
                     overlay = when (panel) {
-                        "bag" -> Overlay.Bag; "craft" -> Overlay.Craft; "craft_bench" -> Overlay.CraftBench; "merchant" -> Overlay.Merchant
+                        "bag" -> Overlay.Bag; "craft" -> Overlay.Craft; "craft_bench" -> Overlay.Craft; "merchant" -> Overlay.Merchant
                         "chat" -> Overlay.Chat; "map" -> Overlay.Map; "trade" -> Overlay.Trade
                         "quests" -> Overlay.Quests; "dog" -> Overlay.Dog; else -> Overlay.Menu
                     }
@@ -13524,7 +13306,7 @@ fun GameScreen(toLobby: () -> Unit) {
     }
     Box(Modifier.fillMaxSize()) {
         AndroidView({ view }, Modifier.fillMaxSize())
-        if (overlay == Overlay.None && !view.building.value) Hud { overlay = it }
+        if (overlay == Overlay.None) Hud { overlay = it }
         // tam ekran pencerelerin arkası düz (oyun görünmez); ayarlardan şeffaf yapılabilir
         // her pencerenin altında dokunuşu yutan katman: pencere dışına dokunmak alttaki oyun tuşlarına geçmez
         // (sohbet hariç: sohbet açıkken oyun oynanmaya devam eder, ama oyun tuşları pencere açmaz)
@@ -13536,9 +13318,8 @@ fun GameScreen(toLobby: () -> Unit) {
         when (overlay) {
             Overlay.Menu -> SideMenu(close, { overlay = it }) { GameSession.save(cloud = true); toLobby() }
             Overlay.Settings -> SettingsScreen(back = { overlay = Overlay.Menu; view.post { view.requestLayout() } }, inGame = true)
-            Overlay.Bag -> InventoryScreen(close, inGame = true, onBuild = { s -> overlay = Overlay.None; view.startBuild(s) }) { overlay = Overlay.Craft }
+            Overlay.Bag -> InventoryScreen(close, inGame = true) { overlay = Overlay.Craft }
             Overlay.Craft -> CraftScreen(close)
-            Overlay.CraftBench -> CraftScreen(close, bench = true)
             Overlay.Merchant -> MerchantScreen(close) { overlay = Overlay.Shop }
             Overlay.Quests -> QuestsScreen(close)
             Overlay.Pass -> PassScreen(close)
@@ -13730,10 +13511,8 @@ internal fun BoxScope.Hud(open: (Overlay) -> Unit) {
                 val bandInPocket = (0 until inv.optInt("pockets", 4)).any { inv.optJSONArray("slots")?.optJSONObject(it)?.optString("id") == "bandage" }
                 // ana görevlerin el üretimi adımları da (ör. İlk Yardım Kiti) çantayı gösterir
                 val craftHand = (0 until story.length()).map { story.getJSONObject(it) }
-                    .any { it.optBoolean("on") && !it.optBoolean("ready") && it.has("craft") && !it.optBoolean("bench") }
-                // kaya kırma adımı: kazma elde değilse çanta gösterilir
-                val pickHeld = inv.optJSONObject("eq")?.optJSONObject("weapon")?.optString("id")?.startsWith("t_pick_") == true
-                if ((gstep in BAG_STEPS || craftHand || (gstep == "g4e" && !pickHeld)) && !(gstep == "g5b" && bandInPocket)) {
+                    .any { it.optBoolean("on") && !it.optBoolean("ready") && it.has("craft") }
+                if ((gstep in BAG_STEPS || craftHand) && !(gstep == "g5b" && bandInPocket)) {
                     TutPulse(Modifier.matchParentSize())
                     TutTap("Çantayı Aç")
                 }
@@ -13766,7 +13545,7 @@ internal fun BoxScope.Hud(open: (Overlay) -> Unit) {
     GuideBubble()
 }
 
-private val BAG_STEPS = setOf("g4", "g4b", "g4c", "g4d", "g4f", "g4g", "g4h", "g4i", "g5", "g5b")
+private val BAG_STEPS = setOf("g4", "g4b", "g4c", "g4f", "g4g", "g4h", "g5", "g5b")
 
 /** Para gösterimi: 100.000'e kadar tam ("12.345"), sonra kısaltılmış ("123,4 B", "12,50 M", "1,25 Mr") */
 fun fmtMoney(n: Long): String = when {
@@ -13963,7 +13742,7 @@ fun GarageScreen(close: () -> Unit) {
         // atölye manzarası (yarım kalmış cip, lamba ışığı) ve Viktor'un notu
         SceneBackground("bg_garage", null, Modifier.fillMaxWidth().height(96.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(4.dp)),
             dim = 0.35f, zoom = 1.0f, ay = 0.62f) {
-            PT("Parçaları tezgâhta üret, bana getir. Aracı hazırlarım, anahtarını postana yollarım.", 14.sp, Px.Text, maxLines = 2,
+            PT("Parçaları üret, bana getir. Aracı hazırlarım, anahtarını postana yollarım.", 14.sp, Px.Text, maxLines = 2,
                 modifier = Modifier.align(Alignment.BottomStart).padding(10.dp))
         }
         Spacer(Modifier.height(8.dp))
@@ -16893,14 +16672,14 @@ private val NEWS: List<List<Pair<String, String>>> = listOf(
     ),
     listOf(
         "Seviye Ve Yetenekler" to "XP ile seviye atlarsın; her seviye +5 Can ve +1 Yumruk Hasarı verir. Yetenek ağacında hasar, can, hız ve takla dallarındaki düğümleri elmasla aç. Ağacı sıfırlarsan harcadığın elmas kredi olarak kalır.",
-        "Eşya Üretimi" to "Ağaç, taş ve hurda topla; çalışma tezgâhında silah, ekipman, ilaç ve sandık üret.",
+        "Eşya Üretimi" to "Ağaç, taş ve hurda topla; silah, ekipman ve ilaç üret.",
         "Köpek" to "Köpeğini barınaktaki eğitmenden alırsın. Köpeğin seninle savaşır, seviye atlar ve eğitmende geliştirilir.",
         "Devlet Üsleri" to "Haritada askerlerin koruduğu devlet üsleri var. Keşfettiğinde üssün vereceği ödülü ve kalan süreyi haritada görürsün. Klan olarak ele geçir, süre bitene kadar savun.",
         "Klan" to "Klan seviyesi arttıkça üye sınırı, güçlendirmeler ve klan ödülleri açılır. Ele geçirilen üsler klana dakikada XP kazandırır.",
     ),
     listOf(
         "Canlı NPC'ler" to "Marco, Silas, Elena, Viktor, Jack, Aldric, Diana ve üs askerleri artık 3B: yaklaşınca sana döner ve konuşur.",
-        "Her Şeyin Canı Var" to "Silah, alet, zırh, yüzük ve kolye kullandıkça yıpranır (çantalar kırılmaz): yuvanın altındaki çubuk kalan canı, eşyaya dokununca yüzdesi görünür. Kırık eşya onarılana dek işe yaramaz; tezgâhta ya da Tamirci Viktor'da onar.",
+        "Her Şeyin Canı Var" to "Silah, alet, zırh, yüzük ve kolye kullandıkça yıpranır : yuvanın altındaki çubuk kalan canı, eşyaya dokununca yüzdesi görünür. Kırık eşya onarılana dek işe yaramaz; tezgâhta ya da Tamirci Viktor'da onar.",
         "Araçların Canı" to "Araba 500, motosiklet 200 can. Sürerken araç hasarı üstlenir ve yavaşça aşınır; patlarsa araba 60, motosiklet 30 saniye sonra yeniden çağrılır.",
         "Daha Düzenli Ekran" to "Üstteki yazılar artık sırayla gelir, üst üste binmez. Altın ve elmas tek kapsülde, şarjör tuşu saldırı çemberinin yanında. Etkinlikler 10. seviyede açılır.",
         "Aletler Elde Çalışır" to "Balta ve kazma yalnız elindeyken güçlü vurur (taş 50, demir 100). El Baltası kalktı; öğretici artık bıçak yaptırır.",
@@ -18981,7 +18760,7 @@ val TIPS = listOf(
     "İpucu: Seviye 10'da şehir kapısı açılır. Şehirdeki güvenli bölgede keskin nişancılar seni korur.",
     "İpucu: Toksik zombiler öldüklerinde zehir bulutu bırakır. Panzehir taşı!",
     "İpucu: Karanlık zombiler geceleri daha sık çıkar ve ışınlanır.",
-    "İpucu: Çalışma tezgâhında kask, yelek, bot ve çanta üretebilirsin.",
+    "İpucu: Kask, yelek ve botu çantadaki Üret düğmesinden yapabilirsin.",
     "İpucu: Araçlar yakıt harcar; çantadaki benzin otomatik kullanılır.",
 )
 
@@ -19071,16 +18850,15 @@ fun ItemDetail(item: JSONObject) {
  * (aynı eşyanın farklı tarifleri tek satırda), sağda seçili eşya: Üret tuşları en üstte (kaydırmadan görünür),
  * altında malzemeler ve her malzemenin nereden çıktığı.
  *
- * V12.1: iki ayrı ekran. [bench] false → El Üretimi (çanta ve HUD'dan; yalnız elle yapılan tarifler), true → Tezgâh
- * (tezgâha dokununca; yalnız tezgâh tarifleri). Bir ekrandaki tarif diğerinde görünmez; boş sekmeler gizlenir.
+ * V22: tezgâh kalktı; bütün tarifler elle üretilir. Boş sekmeler gizlenir.
  */
 @Composable
-fun CraftScreen(back: () -> Unit, bench: Boolean = false) {
+fun CraftScreen(back: () -> Unit) {
     var tick by remember { mutableIntStateOf(0) }
     // V21: görev malzeme verince (ya da dışarıdan değişince) ekran kapanıp açılmadan güncellensin: 700 ms'de bir yenilenir
     var qtick by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { while (true) { delay(700); qtick++ } }
-    val data = remember(tick, qtick) { GameSession.ui(if (bench) "craft_bench" else "craft") }
+    val data = remember(tick, qtick) { GameSession.ui("craft") }
     val all = data.optJSONArray("recipes").objs()
     val tabNames = data.optJSONArray("tabs")?.let { a -> List(a.length()) { a.optString(it) } } ?: emptyList()
     // yalnız tarif olan sekmeler (sekme numarası korunur)
@@ -19091,7 +18869,6 @@ fun CraftScreen(back: () -> Unit, bench: Boolean = false) {
     var variant by remember { mutableIntStateOf(0) }
     val list = all.filter { it.optInt("tab") == tab && (!onlyCan || it.optBoolean("can")) }
     val r = list.firstOrNull { it.optJSONObject("out")?.optString("id") == selId } ?: list.firstOrNull()
-    val near = data.optBoolean("near_bench")
 
     // öğretici: hangi sekme, hangi tarif, hangi düğme (adıma göre)
     val tutR = remember { androidx.compose.runtime.mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>() }
@@ -19101,7 +18878,7 @@ fun CraftScreen(back: () -> Unit, bench: Boolean = false) {
     val tutWant: Pair<Int, String>? = craftWant?.let { (id, _) ->
         all.firstOrNull { it.optJSONObject("out")?.optString("id") == id }?.let { it.optInt("tab") to id }
     }
-    // istenen tarif bu ekranda değil (el ↔ tezgâh): nereye gidileceği söylenir
+    // istenen tarif listede yok (görev kalkmış bir eşyayı istiyor)
     val wrongPlace = craftWant != null && tutWant == null
 
     fun craft(v: JSONObject, n: Int) {
@@ -19111,22 +18888,10 @@ fun CraftScreen(back: () -> Unit, bench: Boolean = false) {
     }
 
     Box(Modifier.fillMaxSize()) {
-    PxFrame(if (bench) "Tezgâh" else "El Üretimi", "craft", back, right = {
+    PxFrame("Üretim", "craft", back, right = {
         PxButton(if (onlyCan) "Yapılabilenler" else "Hepsi", height = 36.dp, size = 12.sp, color = if (onlyCan) Px.Green else Px.Dark, icon = "check") {
             onlyCan = !onlyCan
         }
-        Spacer(Modifier.width(8.dp))
-        if (bench) {
-            val left = data.optDouble("temp_left", -1.0)
-            when {
-                // üsteki kalıcı tezgâh çantaya geri alınabilir
-                data.optBoolean("own_bench") -> PxButton("Tezgâhı Kaldır", height = 36.dp, size = 12.sp, color = Px.Red, icon = "hammer") {
-                    val res = GameSession.cmd("pickup_bench"); Toaster.show(res.msg, res.ok); if (res.ok) back()
-                }
-                left > 0 -> PT("Tezgâh ${(left / 60).toInt()}:${"%02d".format((left % 60).toInt())} Daha Durur", 13.sp, Px.Clan)
-                !near -> PT("Tezgâhtan Uzaklaştın", 13.sp, Px.Hard)
-            }
-        } else PT("Gelişmiş Tarifler Tezgâhta", 13.sp, Px.Sub)
     }, bg = "bg_craft") {
         // sekmeler (her sekmede yapılabilir tarif sayısı)
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -19168,7 +18933,6 @@ fun CraftScreen(back: () -> Unit, bench: Boolean = false) {
                                 val vs = g.optJSONArray("variants").objs()
                                 PT(when {
                                     vs.size > 1 -> "${vs.size} Farklı Tarif"
-                                    bench -> "Tezgâhta"
                                     else -> "Her Yerde"
                                 } + if (g.optInt("have") > 0) " · Çantada ${g.optInt("have")}" else "", 11.sp, Px.Sub)
                             }
@@ -19203,7 +18967,7 @@ fun CraftScreen(back: () -> Unit, bench: Boolean = false) {
                     }
                     if (!can) {
                         Spacer(Modifier.height(4.dp))
-                        PT(if (v.optBoolean("bench") && !near) "Tezgâhın Yanına Dön" else "Malzemeler Eksik", 12.sp, Px.Hard)
+                        PT("Malzemeler Eksik", 12.sp, Px.Hard)
                     }
                     if (vs.size > 1) {
                         Spacer(Modifier.height(6.dp))
@@ -19240,8 +19004,7 @@ fun CraftScreen(back: () -> Unit, bench: Boolean = false) {
             }
         }
     }
-    if (wrongPlace) TutLayer(emptyList(), if (craftWant.second) "Görevin istediği eşya tezgâhta yapılır: bu ekranı kapat, haritada işaretli tezgâha git ve ona dokun."
-        else "Görevin istediği eşya el üretiminde: bu ekranı kapat, çantadaki Üret düğmesine bas.", cardStart = 200, cardEnd = 280)
+    if (wrongPlace) TutLayer(emptyList(), "Görevin istediği eşya artık üretilmiyor: bu ekranı kapat, görev listesine bak.", cardStart = 200, cardEnd = 280)
     // öğretici: sekme → tarif → Üret düğmesi sırasıyla parlar
     if (tutWant != null) {
         val (wantTab, wantId) = tutWant
@@ -21164,12 +20927,12 @@ object Tut {
         return ""
     }
 
-    /** Etkin üretim görevinin istediği eşya ve tezgâh tarifi mi (rehber önce; yoksa null) */
+    /** Etkin üretim görevinin istediği eşya (rehber önce; yoksa null); ikinci değer V22'den beri hep false */
     fun craftWant(): Pair<String, Boolean>? {
         val a = GameSession.ui("quests").optJSONArray("story") ?: return null
         val qs = (0 until a.length()).mapNotNull { a.optJSONObject(it) }.filter { it.optBoolean("on") && !it.optBoolean("ready") && it.has("craft") }
         val q = qs.firstOrNull { it.optBoolean("guide") } ?: qs.firstOrNull() ?: return null
-        return q.optString("craft") to q.optBoolean("bench")
+        return q.optString("craft") to false
     }
 
     /** Olayı oyuna bildirir (görev hedefi "Ping"); bilinmeyen ad Rust'ta yok sayılır */

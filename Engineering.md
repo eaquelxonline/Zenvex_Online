@@ -1744,6 +1744,20 @@ design. Release signing uses separate secrets.
   - server migration `20261125_v22_cleanup.sql` (store packs, Diamond Crate prize, pass gem table) must be applied
     together with this build
 
+- V22 asset cleanup, round 2 (picked in the asset catalog):
+  - mining is gone: every rock (big, small, sand, snow, ember, ice) is removed together with the stone and iron
+    pickaxes and the g4d/g4e guide steps and the daily mining quest; chopping a tree now also drops 1–2 stone
+  - the workbench is gone: no bench item, placing/build mode, bench ring, bench-only craft screen or g4i guide step;
+    every recipe is crafted by hand from the bag, repairs are done at Mechanic Viktor; the HUD slot 24 stays empty
+  - bags are gone: bag items are retired (paid out in gold, an equipped bag too) and every bag page is open from the start
+  - Marco's travelling truck is removed: Marco stands at his stop instead of driving in; his 2D frames and the other
+    2D NPC frames (merchant, quest giver, doctor, mechanic, trainer, wizard) are removed, NPCs are drawn only as 3D models
+  - the 2D event-weapon frames (w/ev_*) and their grip data are removed; event weapons are shown as 3D models
+  - about 160 more world objects (bushes, flowers, reeds, mushrooms, fences, regional decorations d_*/l_*, police,
+    shops, bunker, hangar, helipad, workbench, training props, …) leave invisible placeholders like round 1
+  - atlas repacked: 246 frames removed, 29 → 26 pages, 20 → 16 MB
+  - saves stay compatible: item, avatar and species indices are kept, retired items turn into gold
+
 - V22 minimal file structure (same layout as Freedom Network):
   - Gradle root at the repository root (`settings.gradle.kts`, `build.gradle.kts`, wrapper under `Gradle/` with a pinned
     checksum); the Android module is `:Android` with `Source/Main/{AndroidManifest.xml, Kotlin, Resources, Assets}` and

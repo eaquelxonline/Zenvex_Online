@@ -190,24 +190,6 @@ class GameShotsTest {
 
     @Test fun g12_border() = shot("border", { cheat("level 12"); cheat("tp 268 300") }, steps = 90, input = floatArrayOf(1f, 0f, 0f, 0f, 0f))
 
-    /** V12.1: tezgâh eşyası kampın dışına kurulur (kalan süre), tezgâh ekranında yalnız tezgâh tarifleri */
-    private fun placeBench() {
-        cheat("level 12"); cheat("tp 150 320"); cheat("item workbench 1"); cheat("item swamp_moss 3"); cheat("item dried_hide 3"); cheat("item bandage 4")
-        val slots = GameSession.ui("inventory").optJSONArray("slots") ?: return
-        val k = (0 until slots.length()).firstOrNull { slots.optJSONObject(it)?.optString("id") == "workbench" } ?: return
-        cmd(JSONObject().put("cmd", "use").put("slot", k))
-    }
-
-    @Test fun g13_bench() = shot("bench", { placeBench() }, steps = 40)
-
-    /** V15 inşa modu: tezgâh çantadan "Kur" ile seçilir; önizleme yeşil (uygun) ya da kırmızı, ✓ / ✕ */
-    @Test fun g16_buildMode() = shot("build_mode", {
-        cheat("level 12"); cheat("tp 150 320"); cheat("item workbench 1")
-    }, steps = 30, hud = false, after = { v ->
-        val slots = GameSession.ui("inventory").optJSONArray("slots")!!
-        v.startBuild((0 until slots.length()).first { slots.optJSONObject(it)?.optString("id") == "workbench" })
-    })
-
     /** V15: her bölgenin gerçek haritası (incelemek için app/build/game-shots/region_<id>.png; ekran görüntüsü değil) */
     @Test fun g30_allRegionMaps() {
         Assume.assumeTrue("libzenvex.so yok", native())
@@ -270,9 +252,6 @@ class GameShotsTest {
         })
     }
 
-    @Test fun g14_benchCraft() = shot("bench_craft", { placeBench() }, steps = 20, hud = false,
-        overlay = { com.zenvex.online.CraftScreen({}, bench = true) })
-
     @Test fun g15_handCraft() = shot("hand_craft", { cheat("item cloth 6"); cheat("item resin 4") }, steps = 20, hud = false,
         overlay = { com.zenvex.online.CraftScreen({}) })
 
@@ -307,7 +286,7 @@ class GameShotsTest {
     // V13 Cephe botları: üsse girince kalkanlı ve alev makineli askerler
     @Test fun g26_baseBots() = shot("base_bots", { cheat("level 40"); cheat("god"); cheat("tp base 1") }, steps = 120)
 
-    // etkinlik silahları elde (kabza/uç doğrusu katana karelerinden)
+    // etkinlik silahları elde (V22: yalnız 3B model; 2B w/ev kareleri kalktı)
     private fun evWeapon(id: String) { cheat("level 20"); cheat("item ev_${id}_weapon 1"); cmd(JSONObject().put("cmd", "cycle_weapon")) }
     @Test fun g27_evBlood() = shot("ev_blood", { evWeapon("blood") }, steps = 30)
     @Test fun g28_evTitanWalk() = shot("ev_titan_walk", { evWeapon("titan") }, steps = 40, input = floatArrayOf(1f, 0f, 0f, 0f, 0f))
@@ -394,7 +373,6 @@ class GameShotsTest {
     }
     @Test fun s09_chopStone() { heroLevel = 8; sequence("chop", 0, null, attackRight, 12, warm = 6, stepPer = 3, setup = { cheat("item t_axe_stone 1"); node("tree", 0, null) }) }
     @Test fun s10_chopIronHeld() { heroLevel = 8; sequence("chop_iron", 2, null, attackRight, 12, warm = 6, stepPer = 3, setup = { node("tree", 2, "t_axe_iron") }) }
-    @Test fun s11_mineIron() { heroLevel = 8; sequence("mine", 1, null, attackRight, 12, warm = 6, stepPer = 3, setup = { cheat("item t_pick_iron 1"); node("rock", 1, null) }) }
     // ------------------------------------------------------------------ V16 efekt motoru v2
     private fun fxShot(name: String, setup: () -> Unit, steps: Int, input: FloatArray? = null, frames: Int = 6, after: ((GameView) -> Unit)? = null) {
         Assume.assumeTrue("libzenvex.so yok", native())
