@@ -12426,7 +12426,7 @@ private val RARE = Color(0xFF6AB8FF)
 private val ODDS = listOf(
     "Efsanevi Kaplama (6 Çeşit)" to "%1,5", "Destansı Kaplama (4 Çeşit)" to "%4", "Karanlık Yüzük" to "%1",
     "Titan Parçası ×2" to "%5", "Karanlık Kolye" to "%3,5", "Karanlık Kristal ×2" to "%9", "Güç İksiri ×3" to "%11",
-    "Askerî Sandık" to "%11", "İlk Yardım Kiti ×5" to "%15", "Can İksiri ×3" to "%17", "1.000 Altın" to "%22",
+    "1.500 Altın" to "%11", "İlk Yardım Kiti ×5" to "%15", "Can İksiri ×3" to "%17", "1.000 Altın" to "%22",
 )
 
 private enum class Phase { Idle, Opening, Reveal }
@@ -12824,7 +12824,7 @@ private fun RevealCard(code: String, skin: JSONObject?, flip: Float, t: Float) {
     val itemId = code.substringBefore(':'); val count = code.substringAfter(':', "1")
     val rarity = when {
         skin != null -> skin.optInt("rarity"); itemId == "gold" -> 0
-        itemId in setOf("ring_titan", "titan_shard") -> 3; itemId in setOf("neck_dark", "dark_crystal", "potion_power", "chest_military") -> 2; else -> 1
+        itemId in setOf("ring_titan", "titan_shard") -> 3; itemId in setOf("neck_dark", "dark_crystal", "potion_power") -> 2; else -> 1
     }
     val col = when (rarity) { 3 -> LEG; 2 -> EPIC; 1 -> RARE; else -> Color(0xFFD8D4C4) }
     val front = flip > 0.5f
@@ -12856,7 +12856,7 @@ private fun RevealCard(code: String, skin: JSONObject?, flip: Float, t: Float) {
 
 private fun itemName(id: String): String = when (id) {
     "gold" -> "Altın"; "ring_titan" -> "Karanlık Yüzük"; "titan_shard" -> "Titan Parçası"; "neck_dark" -> "Karanlık Kolye"
-    "dark_crystal" -> "Karanlık Kristal"; "potion_power" -> "Güç İksiri"; "chest_military" -> "Askerî Sandık"; "medkit" -> "İlk Yardım Kiti"
+    "dark_crystal" -> "Karanlık Kristal"; "potion_power" -> "Güç İksiri"; "medkit" -> "İlk Yardım Kiti"
     "potion_heal" -> "Can İksiri"; else -> id
 }
 
